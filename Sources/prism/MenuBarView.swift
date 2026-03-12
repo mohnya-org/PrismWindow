@@ -6,12 +6,15 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
-            permissionsCard
-            shortcutCard
-            rulesCard
+
+            if !appState.isAccessibilityTrusted {
+                permissionsCard
+            }
+
+            moveSection
 
             HStack {
-                Button("Open Settings") {
+                Button("Settings…") {
                     NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
                     NSApp.activate(ignoringOtherApps: true)
                 }
@@ -31,76 +34,43 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Prism")
                 .font(.title2.bold())
-            Text(appState.lastMessage)
+            Text("Move windows between displays")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if appState.lastMessage != "Ready" {
+                Text(appState.lastMessage)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
     private var permissionsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(
-                appState.isAccessibilityTrusted ? "Accessibility granted" : "Accessibility required",
-                systemImage: appState.isAccessibilityTrusted ? "checkmark.shield" : "exclamationmark.triangle"
-            )
-            .font(.headline)
+            Label("Accessibility required", systemImage: "exclamationmark.triangle")
+                .font(.headline)
 
-            Text("Native fullscreen windows are handled through Accessibility APIs. Screen Recording may still help debugging, but it is not required for the fallback path.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            Button("Request Accessibility Access") {
+            Button("Grant Access") {
                 appState.refreshPermissions(prompt: true)
             }
         }
     }
 
-    private var shortcutCard: some View {
+    private var moveSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Move focused fullscreen window")
-                .font(.headline)
-            Text("Shortcut: Control + Option + Command + F")
-                .font(.subheadline.monospaced())
-                .foregroundStyle(.secondary)
+            let displays = DisplayInfo.availableDisplays()
 
-            Button {
-                Task {
-                    await appState.moveFocusedWindowToNextDisplay(trigger: "Manual")
-                }
-            } label: {
-                Text(appState.isHandlingMove ? "Moving..." : "Move Now")
-                    .frame(maxWidth: .infinity)
-            }
-            .disabled(appState.isHandlingMove)
-            .buttonStyle(.borderedProminent)
-        }
-    }
-
-    private var rulesCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Pin frontmost app to a display")
-                .font(.headline)
-
-            if let app = appState.currentAppDescriptor {
-                Text("\(app.displayName) (`\(app.bundleIdentifier)`)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                ForEach(DisplayInfo.availableDisplays(), id: \.id) { display in
-                    Button("Send \(app.displayName) to \(display.name)") {
-                        appState.saveRule(for: display.id)
+            ForEach(displays, id: \.id) { display in
+                Button {
+                    Task {
+                        await appState.moveFocusedWindow(to: display.id)
                     }
+                } label: {
+                    Label(display.name, systemImage: "display")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                Button("Remove Rule for \(app.displayName)") {
-                    appState.saveRule(for: nil)
-                }
-                .foregroundStyle(.secondary)
-            } else {
-                Text("No active app detected.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                .disabled(appState.isHandlingMove)
             }
         }
     }

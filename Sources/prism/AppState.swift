@@ -52,6 +52,26 @@ final class AppState: ObservableObject {
         }
     }
 
+    func moveFocusedWindow(to displayID: CGDirectDisplayID) async {
+        guard !isHandlingMove else { return }
+        isHandlingMove = true
+        defer { isHandlingMove = false }
+
+        refreshPermissions(prompt: true)
+        guard isAccessibilityTrusted else {
+            lastMessage = "Accessibility permission is required."
+            return
+        }
+
+        do {
+            let result = try await windowMover.moveFocusedWindow(to: displayID)
+            lastMessage = result.message
+            refreshCurrentAppDescriptor()
+        } catch {
+            lastMessage = error.localizedDescription
+        }
+    }
+
     func refreshCurrentAppDescriptor() {
         currentAppDescriptor = NSWorkspace.shared.frontmostApplication.map {
             AppDescriptor(
