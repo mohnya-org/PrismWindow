@@ -11,7 +11,11 @@ struct DisplayInfo: Identifiable, Hashable {
     }
 
     static func availableDisplays() -> [DisplayInfo] {
-        NSScreen.screens.compactMap { screen in
+        // NSScreen uses bottom-left origin (Y up), but AX APIs use
+        // top-left origin (Y down). Convert all frames to AX coordinates.
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+
+        return NSScreen.screens.compactMap { screen in
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
                 return nil
             }
@@ -21,8 +25,8 @@ struct DisplayInfo: Identifiable, Hashable {
             return DisplayInfo(
                 id: id,
                 name: fallbackName,
-                frame: screen.frame,
-                visibleFrame: screen.visibleFrame
+                frame: nsRectToCG(screen.frame, primaryHeight: primaryHeight),
+                visibleFrame: nsRectToCG(screen.visibleFrame, primaryHeight: primaryHeight)
             )
         }
         .sorted {
@@ -31,5 +35,14 @@ struct DisplayInfo: Identifiable, Hashable {
             }
             return $0.frame.minX < $1.frame.minX
         }
+    }
+
+    private static func nsRectToCG(_ rect: CGRect, primaryHeight: CGFloat) -> CGRect {
+        CGRect(
+            x: rect.origin.x,
+            y: primaryHeight - rect.origin.y - rect.height,
+            width: rect.width,
+            height: rect.height
+        )
     }
 }
