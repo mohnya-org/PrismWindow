@@ -80,8 +80,12 @@ struct WindowMover {
 
     private func move(window: AXUIElement, from frame: CGRect, to targetDisplay: DisplayInfo) async throws -> MoveResult {
         let wasFullScreen = (window.optionalValue(for: fullScreenAttribute()) as? NSNumber)?.boolValue ?? false
+        let app = NSWorkspace.shared.frontmostApplication
 
         if wasFullScreen {
+            // Hide the app so the fullscreen exit/re-enter animations are invisible.
+            app?.hide()
+
             try window.setValue(kCFBooleanFalse, for: fullScreenAttribute())
             try await waitForFullScreenState(of: window, expected: false)
         }
@@ -90,11 +94,11 @@ struct WindowMover {
         try window.setValue(pointValue(targetRect.origin), for: kAXPositionAttribute as CFString)
         try window.setValue(sizeValue(targetRect.size), for: kAXSizeAttribute as CFString)
 
-        try await Task.sleep(for: .milliseconds(250))
-
         if wasFullScreen {
             try window.setValue(kCFBooleanTrue, for: fullScreenAttribute())
             try await waitForFullScreenState(of: window, expected: true)
+            // Bring the app back to the foreground after fullscreen is restored.
+            app?.activate()
             return MoveResult(message: "Moved fullscreen window to \(targetDisplay.name) via fallback.")
         }
 
