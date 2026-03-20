@@ -168,9 +168,8 @@ struct SettingsView: View {
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
                 }
+                Divider()
             }
-
-            Divider()
 
             Toggle(isOn: launchAtLoginBinding) {
                 Text("Launch at Login")
