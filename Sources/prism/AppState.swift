@@ -5,6 +5,9 @@ import SwiftUI
 @MainActor
 final class AppState: ObservableObject {
     @Published var lastMessage = "Ready"
+    @Published var autoApplyRules: Bool = UserDefaults.standard.object(forKey: "autoApplyRules") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(autoApplyRules, forKey: "autoApplyRules") }
+    }
     @Published var isAccessibilityTrusted = false
     @Published var isHandlingMove = false
     @Published var currentAppDescriptor: AppDescriptor?
@@ -361,7 +364,8 @@ final class AppState: ObservableObject {
     }
 
     private func applyRuleForFrontmostAppIfNeeded() async {
-        guard let frontmost = NSWorkspace.shared.frontmostApplication,
+        guard autoApplyRules,
+              let frontmost = NSWorkspace.shared.frontmostApplication,
               let bundleIdentifier = frontmost.bundleIdentifier,
               let rule = rules.first(where: {
                   $0.layoutSignature == currentLayoutSignature &&
