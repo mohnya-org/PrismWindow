@@ -40,7 +40,7 @@ struct SettingsView: View {
 
                 switch selectedTab {
                 case .overview:
-                    List { statusSection }
+                    overviewContent
                 case .rules:
                     rulesEditor
                 case .layouts:
@@ -73,23 +73,166 @@ struct SettingsView: View {
         appState.displays.first(where: { $0.persistentID == selectedDisplayPersistentID })
     }
 
-    private var statusSection: some View {
-        Section("Current status") {
-            LabeledContent("Accessibility") {
-                Text(appState.isAccessibilityTrusted ? "Granted" : "Missing")
+    private var currentAppName: String {
+        appState.currentAppDescriptor?.displayName ?? "No focused app"
+    }
+
+    private var overviewContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                overviewHero
+                overviewMetrics
+                overviewStatusCard
+                overviewDisplaysCard
             }
-            LabeledContent("Shortcut") {
-                Text("Ctrl + Opt + Cmd + F")
+            .padding(16)
+        }
+    }
+
+    private var overviewHero: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Workspace Overview")
+                .font(.largeTitle.weight(.semibold))
+            Text("Current display setup, permissions, and active placement context.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [Color.blue.opacity(0.18), Color.cyan.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var overviewMetrics: some View {
+        HStack(alignment: .top, spacing: 14) {
+            overviewMetricCard(
+                title: "Accessibility",
+                value: appState.isAccessibilityTrusted ? "Granted" : "Missing",
+                symbol: appState.isAccessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill",
+                tint: appState.isAccessibilityTrusted ? .green : .orange
+            )
+            overviewMetricCard(
+                title: "Displays",
+                value: "\(appState.displays.count)",
+                symbol: "display.2",
+                tint: .blue
+            )
+            overviewMetricCard(
+                title: "Rules",
+                value: "\(appState.currentLayoutRules.count)",
+                symbol: "square.grid.2x2.fill",
+                tint: .indigo
+            )
+            overviewMetricCard(
+                title: "Focused App",
+                value: currentAppName,
+                symbol: "app.fill",
+                tint: .teal
+            )
+        }
+    }
+
+    private func overviewMetricCard(title: String, value: String, symbol: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(tint)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.headline)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+        .padding(16)
+        .background(cardBackground)
+    }
+
+    private var overviewStatusCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Status")
+                .font(.headline)
+
+            HStack(alignment: .top, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Shortcut")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Ctrl + Opt + Cmd + F")
+                        .font(.headline)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Display setup")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(appState.currentLayoutName)
+                        .font(.headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            LabeledContent("Display setup") {
-                Text(appState.currentLayoutName)
-                    .multilineTextAlignment(.trailing)
-            }
-            LabeledContent("Latest result") {
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Latest result")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(appState.lastMessage)
-                    .multilineTextAlignment(.trailing)
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(18)
+        .background(cardBackground)
+    }
+
+    private var overviewDisplaysCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Display Setup")
+                .font(.headline)
+
+            if appState.displays.isEmpty {
+                Text("No displays detected.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(appState.displays.enumerated()), id: \.element.persistentID) { index, display in
+                    HStack(spacing: 12) {
+                        Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 22)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Display \(index + 1)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(display.name)
+                                .font(.headline)
+                            Text("\(Int(display.frame.width)) × \(Int(display.frame.height))")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.secondary.opacity(0.08))
+                    )
+                }
+            }
+        }
+        .padding(18)
+        .background(cardBackground)
     }
 
     private var rulesEditor: some View {
