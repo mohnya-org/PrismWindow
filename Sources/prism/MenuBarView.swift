@@ -10,16 +10,25 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
-            HStack {
-                Text("Prism")
-                    .font(.title2.bold())
-                Spacer()
-                Toggle(isOn: launchAtLoginBinding) {
-                    Text("Launch at Login")
-                        .font(.caption)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Prism")
+                        .font(.title2.bold())
+                    Spacer()
+                    Toggle(isOn: launchAtLoginBinding) {
+                        Text("Launch at Login")
+                            .font(.caption)
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
                 }
-                .toggleStyle(.switch)
-                .controlSize(.mini)
+                if appState.lastMessage != "Ready" {
+                    Text(appState.lastMessage)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             // Auto-apply toggle
@@ -234,6 +243,7 @@ private struct MenuBarDisplayLayoutView: View {
                         isHovered: isHovered,
                         isFocusedHere: isFocusedHere,
                         isLocked: isLocked,
+                        isMovable: !isFocusedHere && !isFocusedAppRuleCompliant && !isHandlingMove,
                         tileFrame: frame,
                         isDisabled: isHandlingMove || isFocusedAppRuleCompliant,
                         onSelect: { onSelect(display.id) }
@@ -260,9 +270,12 @@ private struct DisplayTileButton: View {
     let isHovered: Bool
     let isFocusedHere: Bool
     let isLocked: Bool
+    let isMovable: Bool
     let tileFrame: CGRect
     let isDisabled: Bool
     let onSelect: () -> Void
+
+    @State private var pulsePhase = false
 
     var body: some View {
         Button(action: onSelect) {
@@ -272,9 +285,27 @@ private struct DisplayTileButton: View {
             .frame(width: tileFrame.width, height: tileFrame.height)
             .background { tileBackground }
             .overlay { tileBorder }
+            .overlay {
+                if isMovable && !isHovered {
+                    ZStack {
+                        // Ripple circle
+                        Circle()
+                            .stroke(Color.accentColor.opacity(pulsePhase ? 0 : 0.4), lineWidth: 1.5)
+                            .frame(width: pulsePhase ? 40 : 16, height: pulsePhase ? 40 : 16)
+                            .animation(.easeOut(duration: 1.5).repeatForever(autoreverses: false), value: pulsePhase)
+
+                        // Center dot
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.6))
+                            .frame(width: 8, height: 8)
+
+                    }
+                }
+            }
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+        .onAppear { pulsePhase = true }
     }
 
     @ViewBuilder
