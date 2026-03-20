@@ -22,6 +22,14 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
 
+            if !appState.currentLayoutRules.isEmpty {
+                Toggle(isOn: $appState.autoApplyRules) {
+                    Label("Auto-apply rules", systemImage: "bolt.fill")
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
+
             if !appState.isAccessibilityTrusted {
                 permissionsCard
             }
