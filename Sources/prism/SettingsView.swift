@@ -379,23 +379,22 @@ struct SettingsView: View {
 
             Spacer()
 
-            Toggle("Fullscreen", isOn: fullscreenBinding)
+            Toggle("Fullscreen", isOn: fullscreenAutoSaveBinding)
                 .toggleStyle(.switch)
                 .controlSize(.small)
 
-            if let selectedRule {
-                Button("Remove") {
-                    appState.removeRule(selectedRule)
+            if selectedRule != nil {
+                Button {
+                    if let rule = selectedRule {
+                        appState.removeRule(rule)
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
-                .controlSize(.small)
+                .buttonStyle(.plain)
+                .help("Remove rule")
             }
-
-            Button("Save") {
-                saveSelectedRule()
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(selectedDisplay == nil || selectedApp == nil)
         }
         .padding(10)
         .background(cardBackground)
@@ -448,6 +447,21 @@ struct SettingsView: View {
         )
     }
 
+    private var fullscreenAutoSaveBinding: Binding<Bool> {
+        Binding(
+            get: { selectedMode == .fullscreen },
+            set: { newValue in
+                selectedMode = newValue ? .fullscreen : .windowed
+                // Auto-save if a rule already exists (update its mode)
+                if let selectedRule {
+                    appState.updateRuleMode(selectedRule, to: selectedMode)
+                } else {
+                    saveSelectedRule()
+                }
+            }
+        )
+    }
+
     private var selectedProfileBinding: Binding<String> {
         Binding(
             get: { appState.selectedProfileID },
@@ -476,6 +490,7 @@ struct SettingsView: View {
 
     private func selectDisplay(_ display: DisplayInfo) {
         selectedDisplayPersistentID = display.persistentID
+        saveSelectedRule()
     }
 
     private func saveSelectedRule() {
