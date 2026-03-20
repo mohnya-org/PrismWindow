@@ -93,7 +93,7 @@ struct SettingsView: View {
                 overviewStatusCard
             }
             overviewDisplaysCard
-            Spacer(minLength: 0)
+                .frame(maxHeight: .infinity)
         }
         .padding(16)
     }
@@ -156,39 +156,16 @@ struct SettingsView: View {
 
     private var overviewStatusCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Status")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Shortcut")
-                        .font(.caption2)
+            if appState.lastMessage != "Ready" {
+                HStack(spacing: 8) {
+                    Text("Latest")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text("⌃⌥⌘F")
-                        .font(.callout.weight(.semibold))
-                }
-
-                Divider().frame(height: 28)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Layout")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(appState.currentLayoutName)
-                        .font(.callout.weight(.semibold))
+                    Text(appState.lastMessage)
+                        .font(.caption)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .foregroundStyle(.secondary)
                 }
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Latest")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(appState.lastMessage)
-                    .font(.caption)
-                    .lineLimit(2)
             }
 
             Divider()
@@ -224,7 +201,7 @@ struct SettingsView: View {
 
     private var overviewDisplaysCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Displays")
+            Text("Display Layout")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
@@ -232,31 +209,8 @@ struct SettingsView: View {
                 Text("No displays detected.")
                     .foregroundStyle(.secondary)
             } else {
-                HStack(spacing: 10) {
-                    ForEach(Array(appState.displays.enumerated()), id: \.element.persistentID) { index, display in
-                        HStack(spacing: 10) {
-                            Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 20)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(display.name)
-                                    .font(.callout.weight(.semibold))
-                                    .lineLimit(1)
-                                Text("\(Int(display.frame.width))×\(Int(display.frame.height))")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.secondary.opacity(0.08))
-                        )
-                    }
-                }
+                OverviewDisplayLayoutView(displays: appState.displays)
+                    .frame(maxHeight: .infinity)
             }
         }
         .padding(12)
@@ -527,42 +481,69 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 6)
             } else {
-                VStack(spacing: 6) {
-                    ForEach(layout.rules) { rule in
-                        HStack(spacing: 10) {
-                            if let icon = icon(for: rule.bundleIdentifier) {
-                                Image(nsImage: icon)
-                                    .resizable()
-                                    .interpolation(.high)
-                                    .frame(width: 20, height: 20)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                            }
+                let rulesByProfile = Dictionary(grouping: layout.rules, by: \.profileID)
+                let sortedProfiles = layout.profiles.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(rule.appName)
-                                    .font(.callout)
-                                Text("\(rule.profileName) • \(rule.targetDisplayName) • \(rule.windowMode.label)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(sortedProfiles) { profile in
+                        let profileRules = rulesByProfile[profile.id] ?? []
+                        if !profileRules.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "person.crop.rectangle")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    Text(profile.name)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                    if profile.id == appState.selectedProfileID && layout.signature == appState.currentLayoutSignature {
+                                        Text("Selected")
+                                            .font(.caption2.weight(.medium))
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1)
+                                            .background(Capsule().fill(Color.green.opacity(0.15)))
+                                            .foregroundStyle(.green)
+                                    }
+                                }
 
-                            Spacer()
+                                ForEach(profileRules) { rule in
+                                    HStack(spacing: 10) {
+                                        if let icon = icon(for: rule.bundleIdentifier) {
+                                            Image(nsImage: icon)
+                                                .resizable()
+                                                .interpolation(.high)
+                                                .frame(width: 20, height: 20)
+                                                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                        }
 
-                            Button {
-                                appState.removeRule(rule)
-                            } label: {
-                                Image(systemName: "trash")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(rule.appName)
+                                                .font(.callout)
+                                            Text("\(rule.targetDisplayName) • \(rule.windowMode.label)")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+
+                                        Spacer()
+
+                                        Button {
+                                            appState.removeRule(rule)
+                                        } label: {
+                                            Image(systemName: "trash")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(Color.secondary.opacity(0.06))
+                                    )
+                                }
                             }
-                            .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.secondary.opacity(0.06))
-                        )
                     }
                 }
                 .padding(.top, 6)
@@ -682,6 +663,49 @@ private struct DisplaySetupAssignmentCanvas: View {
     }
 }
 
+private struct OverviewDisplayLayoutView: View {
+    let displays: [DisplayInfo]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let layout = SettingsDisplayLayout(displays: displays, canvasSize: proxy.size)
+
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(displays.enumerated()), id: \.element.persistentID) { index, display in
+                    let frame = layout.frame(for: display)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text(display.name)
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Text("\(Int(display.frame.width))×\(Int(display.frame.height))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(8)
+                    .frame(width: frame.width, height: frame.height, alignment: .topLeading)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.secondary.opacity(0.1))
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                    }
+                    .position(x: frame.midX, y: frame.midY)
+                }
+            }
+        }
+        .padding(8)
+    }
+}
+
 private struct SettingsDisplayLayout {
     private let bounds: CGRect
     private let scale: CGFloat
@@ -709,8 +733,8 @@ private struct SettingsDisplayLayout {
         CGRect(
             x: xInset + ((display.frame.minX - bounds.minX) * scale),
             y: yInset + ((display.frame.minY - bounds.minY) * scale),
-            width: max(display.frame.width * scale, 120),
-            height: max(display.frame.height * scale, 100)
+            width: display.frame.width * scale,
+            height: display.frame.height * scale
         )
     }
 }

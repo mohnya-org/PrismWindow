@@ -20,7 +20,6 @@ final class AppState: ObservableObject {
     private let permissionManager = PermissionManager()
     private let windowMover = WindowMover()
     private let ruleStore = RuleStore()
-    private var hotKeyController: GlobalHotKeyController?
     private var observers: [Any] = []
 
     init() {
@@ -32,11 +31,6 @@ final class AppState: ObservableObject {
         refreshRunningApps()
         refreshPermissions(prompt: false)
         ensureProfileSelection()
-        hotKeyController = GlobalHotKeyController { [weak self] in
-            Task { @MainActor in
-                await self?.moveFocusedWindowToNextDisplay(trigger: "Global shortcut")
-            }
-        }
         installObservers()
         refreshCurrentAppDescriptor()
     }
@@ -204,26 +198,6 @@ final class AppState: ObservableObject {
         selectedProfileIDsByLayout[currentLayoutSignature] = currentProfilesAfterDeletion(removedID: profile.id).first?.id
         persist()
         lastMessage = "Deleted display setup profile '\(profile.name)'."
-    }
-
-    func moveFocusedWindowToNextDisplay(trigger: String = "Manual") async {
-        guard !isHandlingMove else { return }
-        isHandlingMove = true
-        defer { isHandlingMove = false }
-
-        refreshPermissions(prompt: true)
-        guard isAccessibilityTrusted else {
-            lastMessage = "Accessibility permission is required."
-            return
-        }
-
-        do {
-            let result = try await windowMover.moveFocusedWindowToNextDisplay()
-            lastMessage = "\(trigger): \(result.message)"
-            refreshCurrentAppDescriptor()
-        } catch {
-            lastMessage = error.localizedDescription
-        }
     }
 
     func moveFocusedWindow(to displayID: CGDirectDisplayID) async {

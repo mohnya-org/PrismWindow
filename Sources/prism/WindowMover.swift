@@ -6,7 +6,6 @@ struct MoveResult {
 }
 
 enum WindowMoveError: LocalizedError {
-    case noDisplays
     case noFrontmostApp
     case ownAppWindow
     case noFocusedWindow
@@ -15,8 +14,6 @@ enum WindowMoveError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noDisplays:
-            return "No secondary display is available."
         case .noFrontmostApp:
             return "No frontmost app found."
         case .ownAppWindow:
@@ -54,20 +51,6 @@ struct WindowMover {
         }
     }
 
-    func moveFocusedWindowToNextDisplay() async throws -> MoveResult {
-        let displays = DisplayInfo.availableDisplays()
-        guard displays.count > 1 else {
-            throw WindowMoveError.noDisplays
-        }
-
-        let context = try focusedWindowContext()
-        let currentDisplay = displayForWindowFrame(context.frame, displays: displays) ?? displays[0]
-        guard let currentIndex = displays.firstIndex(where: { $0.id == currentDisplay.id }) else {
-            throw WindowMoveError.displayNotFound
-        }
-        let nextDisplay = displays[(currentIndex + 1) % displays.count]
-        return try await move(window: context.window, from: context.frame, to: nextDisplay, mode: .keepCurrent)
-    }
 
     func moveFocusedWindow(to displayID: CGDirectDisplayID, mode: DisplayWindowMode = .keepCurrent) async throws -> MoveResult {
         let displays = DisplayInfo.availableDisplays()
