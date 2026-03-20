@@ -325,6 +325,21 @@ final class AppState: ObservableObject {
         }
         observers.append(terminateObserver)
 
+        // Re-apply rules when Spaces change (e.g. user manually exits
+        // fullscreen, which destroys the fullscreen Space).
+        let spaceObserver = center.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                // Small delay to let the space transition settle.
+                try? await Task.sleep(for: .milliseconds(500))
+                await self?.applyRuleForFrontmostAppIfNeeded()
+            }
+        }
+        observers.append(spaceObserver)
+
         let screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -339,6 +354,7 @@ final class AppState: ObservableObject {
 
     private func applyRuleForFrontmostAppIfNeeded() async {
         guard autoApplyRules,
+              !isHandlingMove,
               let frontmost = NSWorkspace.shared.frontmostApplication,
               let bundleIdentifier = frontmost.bundleIdentifier,
               let rule = rules.first(where: {
