@@ -1,42 +1,79 @@
 # Prism
 
-Prism is a macOS menu bar app that automatically places windows on the correct display based on user-defined rules.
+Prism is a macOS menu bar app that moves the focused window to the correct display using user-defined rules.
 
 ## Features
 
-- **Rule-based window placement** — assign each app to a specific display with fullscreen or windowed mode
-- **Auto-apply on focus** — when an app becomes frontmost, Prism moves its window to the configured display
-- **Fullscreen re-enforcement** — if a fullscreen rule is manually exited, Prism detects the Space change and re-applies the rule
-- **Display setup profiles** — create multiple named profiles per physical display arrangement (e.g. "Work", "Home")
-- **Auto-apply toggle** — enable or disable automatic rule application from the menu bar
-- **Launch at Login** — optionally start Prism when you log in (configurable in Settings)
-- **Menu bar UI** — move the focused window manually via buttons or a visual display layout selector
+- Rule-based window placement per app
+- Fullscreen or windowed placement rules
+- Auto-apply when an app becomes frontmost
+- Multiple named setup profiles for the same physical display arrangement
+- Manual move UI in the menu bar
+- Visual display layout picker
+- Settings UI for editing rules, profiles, and display setups
 
-## Build
+## Development
+
+Run the app from source:
 
 ```bash
 swift build
 swift run Prism
 ```
 
+## Release Build
+
+Build a distributable `.app` bundle:
+
+```bash
+./scripts/build-app.sh
+```
+
+Output:
+
+```bash
+.build/release/Prism.app
+```
+
+The app icon source image is stored at:
+
+```bash
+Resources/AppIcon.png
+```
+
+The build script converts it into an `.icns` file and places it in the app bundle.
+
 ## Permissions
 
-- **Accessibility** — required for reading and moving windows via the Accessibility API
-- Screen Recording is not required
+- Accessibility: required for reading and moving windows
+- Screen Recording: not required
 
-## How it works
+## How It Works
 
-Prism uses the macOS Accessibility API (public, not private) to move windows between displays. For fullscreen windows, the process is:
+Prism uses the macOS Accessibility API to move windows between displays.
 
-1. Hide the app and wait for confirmation
-2. Exit fullscreen via `AXFullScreen` attribute
-3. Wait for the Space transition to complete (`activeSpaceDidChangeNotification`)
-4. Move the window to the target display
-5. Re-enter fullscreen if the rule requires it
-6. Unhide and activate the app
+For normal windows, Prism updates the window position and size directly.
+
+For fullscreen windows, Prism uses a public-API fallback flow:
+
+1. Exit fullscreen
+2. Move the window to the target display
+3. Re-enter fullscreen if required
+
+This keeps the app compatible with direct distribution and avoids private CGS APIs, but it is not a true Space-to-Space transfer.
+
+## Display Setup Profiles
+
+Rules are organized in two layers:
+
+- Physical display setup: the currently connected monitor arrangement
+- Setup profile: a named rule set for that arrangement, such as `Work`, `Home`, or `Presentation`
+
+You can keep multiple profiles for the same display setup and switch which one auto-applies.
 
 ## Limitations
 
-- Some apps may refuse `AXFullScreen` toggling or window resize operations
-- Windows on non-visible Spaces (e.g. a hidden fullscreen Space on another display) cannot be moved programmatically via public APIs
-- Stage Manager / Mission Control settings can affect perceived fullscreen behavior
+- Some apps refuse `AXFullScreen` toggling or window resize operations
+- Fullscreen moves use a fallback flow, so stale snapshots or residual animations can sometimes remain on the source display
+- Stage Manager, Mission Control, and Space transitions can affect perceived behavior
+- Public APIs do not provide a true Space-to-Space fullscreen move
