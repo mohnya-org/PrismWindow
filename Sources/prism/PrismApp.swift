@@ -10,7 +10,7 @@ struct PrismApp: App {
         MenuBarExtra("Prism", systemImage: "display.2") {
             MenuBarView()
                 .environmentObject(appState)
-                .frame(width: 360)
+                .frame(width: 420)
         }
         .menuBarExtraStyle(.window)
 

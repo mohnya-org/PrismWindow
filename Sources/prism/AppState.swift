@@ -76,7 +76,8 @@ final class AppState: ObservableObject {
         currentAppDescriptor = NSWorkspace.shared.frontmostApplication.map {
             AppDescriptor(
                 bundleIdentifier: $0.bundleIdentifier ?? $0.executableURL?.lastPathComponent ?? "unknown",
-                displayName: $0.localizedName ?? "Unknown App"
+                displayName: $0.localizedName ?? "Unknown App",
+                icon: $0.icon
             )
         }
     }
@@ -155,9 +156,10 @@ final class AppState: ObservableObject {
     }
 }
 
-struct AppDescriptor: Equatable {
+struct AppDescriptor {
     let bundleIdentifier: String
     let displayName: String
+    let icon: NSImage?
 }
 
 struct DisplayRule: Codable, Identifiable, Hashable {
