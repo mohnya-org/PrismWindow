@@ -91,6 +91,7 @@ struct MenuBarView: View {
                     displays: displays,
                     focusedAppDescriptor: appState.currentAppDescriptor,
                     isHandlingMove: appState.isHandlingMove,
+                    isFocusedAppRuleCompliant: isFocusedAppRuleCompliant,
                     hoveredDisplay: $hoveredDisplay,
                     onSelect: moveFocusedWindow(to:)
                 )
@@ -149,6 +150,17 @@ struct MenuBarView: View {
         return display.frame.contains(center)
     }
 
+    private var isFocusedAppRuleCompliant: Bool {
+        guard appState.autoApplyRules,
+              let bundleID = appState.currentAppDescriptor?.bundleIdentifier,
+              appState.currentLayoutRules.contains(where: { $0.bundleIdentifier == bundleID }) else {
+            return false
+        }
+        // If auto-apply is on and a rule exists, the app is either already
+        // on the correct display or will be moved there momentarily.
+        return true
+    }
+
     private func moveFocusedWindow(to displayID: CGDirectDisplayID) {
         Task {
             await appState.moveFocusedWindow(to: displayID)
@@ -199,6 +211,7 @@ private struct MenuBarDisplayLayoutView: View {
     let displays: [DisplayInfo]
     let focusedAppDescriptor: AppDescriptor?
     let isHandlingMove: Bool
+    let isFocusedAppRuleCompliant: Bool
     @Binding var hoveredDisplay: DisplayInfo?
     let onSelect: (CGDirectDisplayID) -> Void
 
@@ -213,14 +226,16 @@ private struct MenuBarDisplayLayoutView: View {
                     let frame = layout.frame(for: display)
                     let isFocusedHere = isAppOnDisplay(display)
                     let isHovered = hoveredDisplayID == display.id
+                    let isLocked = isFocusedHere && isFocusedAppRuleCompliant
 
                     DisplayTileButton(
                         display: display,
                         focusedApp: isFocusedHere ? focusedAppDescriptor : nil,
                         isHovered: isHovered,
                         isFocusedHere: isFocusedHere,
+                        isLocked: isLocked,
                         tileFrame: frame,
-                        isDisabled: isHandlingMove,
+                        isDisabled: isHandlingMove || isFocusedAppRuleCompliant,
                         onSelect: { onSelect(display.id) }
                     )
                     .onHover { hovering in
@@ -244,6 +259,7 @@ private struct DisplayTileButton: View {
     let focusedApp: AppDescriptor?
     let isHovered: Bool
     let isFocusedHere: Bool
+    let isLocked: Bool
     let tileFrame: CGRect
     let isDisabled: Bool
     let onSelect: () -> Void
@@ -263,8 +279,10 @@ private struct DisplayTileButton: View {
 
     @ViewBuilder
     private var tileContent: some View {
-        if isHovered {
+        if isHovered && !isLocked {
             hoverContent
+        } else if isLocked, let app = focusedApp {
+            lockedContent(app)
         } else if let app = focusedApp {
             appBadge(app)
         }
@@ -288,6 +306,26 @@ private struct DisplayTileButton: View {
             }
         }
         .padding(6)
+    }
+
+    private func lockedContent(_ app: AppDescriptor) -> some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 5) {
+                if let icon = app.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 20, height: 20)
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                }
+                Text(app.displayName)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+            }
+            Label("Rule applied", systemImage: "lock.fill")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func appBadge(_ app: AppDescriptor) -> some View {
