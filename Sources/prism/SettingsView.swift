@@ -53,8 +53,10 @@ struct SettingsView: View {
         .onAppear(perform: syncSelections)
         .onChange(of: appState.runningApps) { _, _ in syncSelections() }
         .onChange(of: appState.displays) { _, _ in syncSelections() }
+        .onChange(of: selectedBundleIdentifier) { _, _ in syncRuleSelection() }
         .onChange(of: appState.selectedProfileID) { _, _ in
             profileNameDraft = appState.selectedProfile.name
+            syncRuleSelection()
         }
         .onChange(of: appState.currentAppDescriptor?.bundleIdentifier) { _, newValue in
             if let newValue, appState.runningApps.contains(where: { $0.bundleIdentifier == newValue }) {
@@ -442,6 +444,10 @@ struct SettingsView: View {
             selectedBundleIdentifier = appState.currentAppDescriptor?.bundleIdentifier ?? appState.runningApps.first?.bundleIdentifier ?? ""
         }
 
+        syncRuleSelection()
+    }
+
+    private func syncRuleSelection() {
         if let selectedRule {
             selectedDisplayPersistentID = selectedRule.targetDisplayPersistentID
             selectedMode = selectedRule.windowMode
