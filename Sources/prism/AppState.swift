@@ -11,6 +11,8 @@ final class AppState: ObservableObject {
     @Published var runningApps: [AppDescriptor] = []
     @Published var displays: [DisplayInfo] = []
     @Published var rules: [DisplayRule] = []
+    @Published var profiles: [DisplaySetupProfile] = []
+    @Published var selectedProfileIDsByLayout: [String: String] = [:]
 
     private let permissionManager = PermissionManager()
     private let windowMover = WindowMover()
@@ -19,10 +21,14 @@ final class AppState: ObservableObject {
     private var observers: [Any] = []
 
     init() {
-        rules = ruleStore.loadRules()
+        let payload = ruleStore.loadPayload()
+        rules = payload.rules
+        profiles = payload.profiles
+        selectedProfileIDsByLayout = payload.selectedProfileIDsByLayout
         refreshDisplays()
         refreshRunningApps()
         refreshPermissions(prompt: false)
+        ensureProfileSelection()
         hotKeyController = GlobalHotKeyController { [weak self] in
             Task { @MainActor in
                 await self?.moveFocusedWindowToNextDisplay(trigger: "Global shortcut")
@@ -43,9 +49,32 @@ final class AppState: ObservableObject {
         return displays.map(\.name).joined(separator: " + ")
     }
 
+    var currentProfiles: [DisplaySetupProfile] {
+        let layoutProfiles = profiles
+            .filter { $0.layoutSignature == currentLayoutSignature }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        if layoutProfiles.isEmpty {
+            return [defaultProfileForCurrentLayout()]
+        }
+        return layoutProfiles
+    }
+
+    var selectedProfileID: String {
+        let fallback = currentProfiles.first?.id ?? defaultProfileForCurrentLayout().id
+        return selectedProfileIDsByLayout[currentLayoutSignature] ?? fallback
+    }
+
+    var selectedProfile: DisplaySetupProfile {
+        currentProfiles.first(where: { $0.id == selectedProfileID }) ?? defaultProfileForCurrentLayout()
+    }
+
     var currentLayoutRules: [DisplayRule] {
         rules
-            .filter { $0.layoutSignature == currentLayoutSignature }
+            .filter {
+                $0.layoutSignature == currentLayoutSignature &&
+                $0.profileID == selectedProfileID
+            }
             .sorted { lhs, rhs in
                 if lhs.appName == rhs.appName {
                     return lhs.targetDisplayName < rhs.targetDisplayName
@@ -55,19 +84,24 @@ final class AppState: ObservableObject {
     }
 
     var savedLayouts: [SavedDisplayLayout] {
-        Dictionary(grouping: rules, by: \.layoutSignature)
-            .map { signature, rules in
-                SavedDisplayLayout(
-                    signature: signature,
-                    name: rules.first?.layoutName ?? "Saved Layout",
-                    rules: rules.sorted { $0.appName < $1.appName }
-                )
-            }
-            .sorted { lhs, rhs in
-                if lhs.signature == currentLayoutSignature { return true }
-                if rhs.signature == currentLayoutSignature { return false }
-                return lhs.name < rhs.name
-            }
+        let groupedProfiles = Dictionary(grouping: profiles, by: \.layoutSignature)
+        let knownLayoutSignatures = Set(rules.map(\.layoutSignature)).union(groupedProfiles.keys)
+
+        return knownLayoutSignatures.map { signature in
+            let layoutProfiles = (groupedProfiles[signature] ?? []).sorted { $0.name < $1.name }
+            let layoutRules = rules.filter { $0.layoutSignature == signature }
+            return SavedDisplayLayout(
+                signature: signature,
+                name: layoutProfiles.first?.layoutName ?? layoutRules.first?.layoutName ?? "Saved Layout",
+                profiles: layoutProfiles.isEmpty ? [DisplaySetupProfile(id: "default", layoutSignature: signature, layoutName: layoutRules.first?.layoutName ?? "Saved Layout", name: "Default")] : layoutProfiles,
+                rules: layoutRules
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.signature == currentLayoutSignature { return true }
+            if rhs.signature == currentLayoutSignature { return false }
+            return lhs.name < rhs.name
+        }
     }
 
     func refreshPermissions(prompt: Bool) {
@@ -76,6 +110,7 @@ final class AppState: ObservableObject {
 
     func refreshDisplays() {
         displays = DisplayInfo.availableDisplays()
+        ensureProfileSelection()
     }
 
     func refreshRunningApps() {
@@ -93,6 +128,79 @@ final class AppState: ObservableObject {
                 )
             }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    func selectProfile(id: String) {
+        selectedProfileIDsByLayout[currentLayoutSignature] = id
+        persist()
+    }
+
+    func createProfile(named name: String? = nil) {
+        let baseName = (name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? name!.trimmingCharacters(in: .whitespacesAndNewlines) : suggestedProfileName()
+        let profile = DisplaySetupProfile(
+            id: UUID().uuidString,
+            layoutSignature: currentLayoutSignature,
+            layoutName: currentLayoutName,
+            name: baseName
+        )
+        profiles.append(profile)
+        selectedProfileIDsByLayout[currentLayoutSignature] = profile.id
+        persist()
+        lastMessage = "Created display setup profile '\(profile.name)'."
+    }
+
+    func renameSelectedProfile(to newName: String) {
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            lastMessage = "Profile name cannot be empty."
+            return
+        }
+        guard let profileIndex = profiles.firstIndex(where: {
+            $0.layoutSignature == currentLayoutSignature &&
+            $0.id == selectedProfileID
+        }) else {
+            return
+        }
+
+        profiles[profileIndex] = DisplaySetupProfile(
+            id: profiles[profileIndex].id,
+            layoutSignature: profiles[profileIndex].layoutSignature,
+            layoutName: currentLayoutName,
+            name: trimmedName
+        )
+
+        for index in rules.indices where rules[index].layoutSignature == currentLayoutSignature && rules[index].profileID == selectedProfileID {
+            rules[index] = DisplayRule(
+                layoutSignature: rules[index].layoutSignature,
+                layoutName: currentLayoutName,
+                profileID: rules[index].profileID,
+                profileName: trimmedName,
+                bundleIdentifier: rules[index].bundleIdentifier,
+                appName: rules[index].appName,
+                targetDisplayPersistentID: rules[index].targetDisplayPersistentID,
+                targetDisplayName: rules[index].targetDisplayName,
+                windowMode: rules[index].windowMode
+            )
+        }
+
+        persist()
+        lastMessage = "Renamed display setup profile to '\(trimmedName)'."
+    }
+
+    func deleteSelectedProfile() {
+        guard currentProfiles.count > 1 else {
+            lastMessage = "At least one setup profile must remain."
+            return
+        }
+        let profile = selectedProfile
+        profiles.removeAll { $0.id == profile.id }
+        rules.removeAll {
+            $0.layoutSignature == currentLayoutSignature &&
+            $0.profileID == profile.id
+        }
+        selectedProfileIDsByLayout[currentLayoutSignature] = currentProfilesAfterDeletion(removedID: profile.id).first?.id
+        persist()
+        lastMessage = "Deleted display setup profile '\(profile.name)'."
     }
 
     func moveFocusedWindowToNextDisplay(trigger: String = "Manual") async {
@@ -151,9 +259,12 @@ final class AppState: ObservableObject {
             return
         }
 
+        let profile = selectedProfile
         let rule = DisplayRule(
             layoutSignature: currentLayoutSignature,
             layoutName: currentLayoutName,
+            profileID: profile.id,
+            profileName: profile.name,
             bundleIdentifier: app.bundleIdentifier,
             appName: app.displayName,
             targetDisplayPersistentID: targetDisplay.persistentID,
@@ -163,17 +274,18 @@ final class AppState: ObservableObject {
 
         rules.removeAll {
             $0.layoutSignature == rule.layoutSignature &&
+            $0.profileID == rule.profileID &&
             $0.bundleIdentifier == rule.bundleIdentifier
         }
         rules.append(rule)
         rules.sort { $0.appName.localizedCaseInsensitiveCompare($1.appName) == .orderedAscending }
-        ruleStore.saveRules(rules)
-        lastMessage = "Saved \(mode.label.lowercased()) rule for \(app.displayName) on \(targetDisplay.name)."
+        persist()
+        lastMessage = "Saved \(mode.label.lowercased()) rule for \(app.displayName) on \(targetDisplay.name) in \(profile.name)."
     }
 
     func removeRule(_ rule: DisplayRule) {
         rules.removeAll { $0.id == rule.id }
-        ruleStore.saveRules(rules)
+        persist()
     }
 
     func updateRuleMode(_ rule: DisplayRule, to mode: DisplayWindowMode) {
@@ -183,13 +295,15 @@ final class AppState: ObservableObject {
         rules[index] = DisplayRule(
             layoutSignature: rule.layoutSignature,
             layoutName: rule.layoutName,
+            profileID: rule.profileID,
+            profileName: rule.profileName,
             bundleIdentifier: rule.bundleIdentifier,
             appName: rule.appName,
             targetDisplayPersistentID: rule.targetDisplayPersistentID,
             targetDisplayName: rule.targetDisplayName,
             windowMode: mode
         )
-        ruleStore.saveRules(rules)
+        persist()
         lastMessage = "Updated \(rule.appName) to \(mode.label.lowercased())."
     }
 
@@ -251,6 +365,7 @@ final class AppState: ObservableObject {
               let bundleIdentifier = frontmost.bundleIdentifier,
               let rule = rules.first(where: {
                   $0.layoutSignature == currentLayoutSignature &&
+                  $0.profileID == selectedProfileID &&
                   $0.bundleIdentifier == bundleIdentifier
               }),
               let targetDisplay = displays.first(where: { $0.persistentID == rule.targetDisplayPersistentID }) else {
@@ -266,6 +381,58 @@ final class AppState: ObservableObject {
         } catch {
             lastMessage = "Rule failed: \(error.localizedDescription)"
         }
+    }
+
+    private func ensureProfileSelection() {
+        if profiles.isEmpty || !profiles.contains(where: { $0.layoutSignature == currentLayoutSignature }) {
+            let defaultProfile = defaultProfileForCurrentLayout()
+            if !profiles.contains(where: { $0.id == defaultProfile.id && $0.layoutSignature == defaultProfile.layoutSignature }) {
+                profiles.append(defaultProfile)
+            }
+        }
+
+        if selectedProfileIDsByLayout[currentLayoutSignature] == nil ||
+            !currentProfiles.contains(where: { $0.id == selectedProfileIDsByLayout[currentLayoutSignature] }) {
+            selectedProfileIDsByLayout[currentLayoutSignature] = currentProfiles.first?.id
+        }
+
+        persist()
+    }
+
+    private func defaultProfileForCurrentLayout() -> DisplaySetupProfile {
+        DisplaySetupProfile(
+            id: "default-\(currentLayoutSignature)",
+            layoutSignature: currentLayoutSignature,
+            layoutName: currentLayoutName,
+            name: "Default"
+        )
+    }
+
+    private func currentProfilesAfterDeletion(removedID: String) -> [DisplaySetupProfile] {
+        let remaining = profiles.filter { $0.layoutSignature == currentLayoutSignature && $0.id != removedID }
+        return remaining.sorted { $0.name < $1.name }
+    }
+
+    private func suggestedProfileName() -> String {
+        let existingNames = Set(currentProfiles.map(\.name))
+        if !existingNames.contains("New Setup") {
+            return "New Setup"
+        }
+        var index = 2
+        while existingNames.contains("New Setup \(index)") {
+            index += 1
+        }
+        return "New Setup \(index)"
+    }
+
+    private func persist() {
+        ruleStore.savePayload(
+            RuleStorePayload(
+                rules: rules,
+                profiles: profiles,
+                selectedProfileIDsByLayout: selectedProfileIDsByLayout
+            )
+        )
     }
 }
 
@@ -286,9 +453,17 @@ struct AppDescriptor: Identifiable, Hashable {
     }
 }
 
+struct DisplaySetupProfile: Codable, Identifiable, Hashable {
+    let id: String
+    let layoutSignature: String
+    let layoutName: String
+    let name: String
+}
+
 struct SavedDisplayLayout: Identifiable {
     let signature: String
     let name: String
+    let profiles: [DisplaySetupProfile]
     let rules: [DisplayRule]
 
     var id: String { signature }
@@ -316,11 +491,13 @@ enum DisplayWindowMode: String, Codable, CaseIterable, Identifiable {
 struct DisplayRule: Codable, Identifiable, Hashable {
     let layoutSignature: String
     let layoutName: String
+    let profileID: String
+    let profileName: String
     let bundleIdentifier: String
     let appName: String
     let targetDisplayPersistentID: String
     let targetDisplayName: String
     let windowMode: DisplayWindowMode
 
-    var id: String { "\(layoutSignature)|\(bundleIdentifier)" }
+    var id: String { "\(layoutSignature)|\(profileID)|\(bundleIdentifier)" }
 }

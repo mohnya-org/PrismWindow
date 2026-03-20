@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var selectedDisplayPersistentID = ""
     @State private var selectedMode: DisplayWindowMode = .windowed
     @State private var selectedTab: SettingsTab = .overview
+    @State private var profileNameDraft = ""
 
     var body: some View {
         NavigationStack {
@@ -52,6 +53,9 @@ struct SettingsView: View {
             .onAppear(perform: syncSelections)
             .onChange(of: appState.runningApps) { _, _ in syncSelections() }
             .onChange(of: appState.displays) { _, _ in syncSelections() }
+            .onChange(of: appState.selectedProfileID) { _, _ in
+                profileNameDraft = appState.selectedProfile.name
+            }
             .onChange(of: appState.currentAppDescriptor?.bundleIdentifier) { _, newValue in
                 if let newValue, appState.runningApps.contains(where: { $0.bundleIdentifier == newValue }) {
                     selectedBundleIdentifier = newValue
@@ -71,6 +75,10 @@ struct SettingsView: View {
 
     private var selectedDisplay: DisplayInfo? {
         appState.displays.first(where: { $0.persistentID == selectedDisplayPersistentID })
+    }
+
+    private var selectedProfileName: String {
+        appState.selectedProfile.name
     }
 
     private var currentAppName: String {
@@ -244,6 +252,7 @@ struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    profileCard
                     selectionCard
                     setupCanvasCard
                     currentLayoutAssignmentsCard
@@ -251,6 +260,51 @@ struct SettingsView: View {
                 .padding(16)
             }
         }
+    }
+
+    private var profileCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Setup Profile")
+                .font(.headline)
+
+            HStack(spacing: 12) {
+                Picker("Setup profile", selection: selectedProfileBinding) {
+                    ForEach(appState.currentProfiles) { profile in
+                        Text(profile.name).tag(profile.id)
+                    }
+                }
+                .frame(maxWidth: 280)
+
+                Button("New Profile") {
+                    appState.createProfile()
+                }
+
+                Button("Delete Profile") {
+                    appState.deleteSelectedProfile()
+                }
+                .disabled(appState.currentProfiles.count <= 1)
+
+                Spacer()
+            }
+
+            HStack(spacing: 12) {
+                TextField("Profile name", text: $profileNameDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 280)
+
+                Button("Rename") {
+                    appState.renameSelectedProfile(to: profileNameDraft)
+                    profileNameDraft = appState.selectedProfile.name
+                }
+                .disabled(profileNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || profileNameDraft == appState.selectedProfile.name)
+            }
+
+            Text("Multiple profiles can exist for the same physical display setup. The selected profile is the one that auto-applies.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .background(cardBackground)
     }
 
     private var rulesSidebar: some View {
@@ -281,7 +335,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(app.displayName)
                                 .lineLimit(1)
-                            Text(rule.map { "\($0.targetDisplayName) • \($0.windowMode.label)" } ?? "No rule")
+                            Text(rule.map { "\(selectedProfileName): \($0.targetDisplayName) • \($0.windowMode.label)" } ?? "No rule")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -393,9 +447,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Assignments in this display setup")
                 .font(.headline)
+            Text("Profile: \(selectedProfileName)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if appState.currentLayoutRules.isEmpty {
-                Text("No rules configured for the current display setup.")
+                Text("No rules configured for the selected profile.")
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(appState.currentLayoutRules) { rule in
@@ -466,6 +523,13 @@ struct SettingsView: View {
         )
     }
 
+    private var selectedProfileBinding: Binding<String> {
+        Binding(
+            get: { appState.selectedProfileID },
+            set: { appState.selectProfile(id: $0) }
+        )
+    }
+
     private func assignmentModeBinding(for rule: DisplayRule) -> Binding<Bool> {
         Binding(
             get: { rule.windowMode == .fullscreen },
@@ -479,6 +543,8 @@ struct SettingsView: View {
     }
 
     private func syncSelections() {
+        profileNameDraft = appState.selectedProfile.name
+
         if selectedBundleIdentifier.isEmpty || !appState.runningApps.contains(where: { $0.bundleIdentifier == selectedBundleIdentifier }) {
             selectedBundleIdentifier = appState.currentAppDescriptor?.bundleIdentifier ?? appState.runningApps.first?.bundleIdentifier ?? ""
         }
@@ -537,7 +603,7 @@ struct SettingsView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(rule.appName)
-                        Text("\(rule.targetDisplayName) • \(rule.windowMode.label)")
+                        Text("\(rule.profileName) • \(rule.targetDisplayName) • \(rule.windowMode.label)")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
