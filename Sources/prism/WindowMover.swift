@@ -118,6 +118,8 @@ struct WindowMover {
     private func move(window: AXUIElement, from frame: CGRect, to targetDisplay: DisplayInfo, mode: DisplayWindowMode) async throws -> MoveResult {
         let wasFullScreen = (window.optionalValue(for: fullScreenAttribute()) as? NSNumber)?.boolValue ?? false
         let app = NSWorkspace.shared.frontmostApplication
+        let displays = DisplayInfo.availableDisplays()
+        let sourceDisplay = displayForWindowFrame(frame, displays: displays) ?? targetDisplay
         let shouldEndFullScreen = switch mode {
         case .keepCurrent:
             wasFullScreen
@@ -136,11 +138,35 @@ struct WindowMover {
         }
 
         if shouldEndFullScreen {
-            // Hide the app so the fullscreen exit/re-enter animations are invisible.
+            // Hide the app and wait until macOS confirms it is hidden, so that
+            // the fullscreen-exit space transition plays over an empty window.
             app?.hide()
+            if let app {
+                for _ in 0..<20 {
+                    if app.isHidden { break }
+                    try await Task.sleep(for: .milliseconds(10))
+                }
+            }
 
             try window.setValue(kCFBooleanFalse, for: fullScreenAttribute())
             try await waitForFullScreenState(of: window, expected: false)
+            // The AX attribute flips before the space-transition animation
+            // finishes. Wait for the actual animation to complete.
+            try await waitForSpaceChange()
+            // Give the compositor a few extra frames to flush the source
+            // display's framebuffer after the space transition completes.
+            try await Task.sleep(for: .milliseconds(200))
+
+            // Push the window just outside the source display's
+            // visible area. This clears any stale snapshot / residual image
+            // that macOS leaves behind after the fullscreen-exit animation.
+            let hidePoint = CGPoint(
+                x: sourceDisplay.frame.maxX + 100,
+                y: sourceDisplay.frame.maxY + 100
+            )
+            try window.setValue(pointValue(hidePoint), for: kAXPositionAttribute as CFString)
+            let tinySize = CGSize(width: 1, height: 1)
+            try window.setValue(sizeValue(tinySize), for: kAXSizeAttribute as CFString)
         }
 
         let targetRect = targetDisplay.visibleFrame.insetBy(dx: 20, dy: 20)
@@ -150,7 +176,10 @@ struct WindowMover {
         if shouldEnterFullScreen {
             try window.setValue(kCFBooleanTrue, for: fullScreenAttribute())
             try await waitForFullScreenState(of: window, expected: true)
-            // Bring the app back to the foreground after fullscreen is restored.
+            // Wait for the fullscreen-enter animation to complete before
+            // showing the app, so the user never sees the windowed state.
+            try await waitForSpaceChange()
+            app?.unhide()
             app?.activate()
             return MoveResult(message: "Moved window to \(targetDisplay.name) in fullscreen.")
         }
@@ -169,6 +198,24 @@ struct WindowMover {
             try await Task.sleep(for: .milliseconds(150))
         }
         throw WindowMoveError.unsupportedWindow
+    }
+
+    private func waitForSpaceChange(timeout: Duration = .seconds(3)) async throws {
+        let center = NSWorkspace.shared.notificationCenter
+        let notifications = center.notifications(
+            named: NSWorkspace.activeSpaceDidChangeNotification
+        )
+        // Wait for the first notification or give up after the timeout.
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for await _ in notifications { break }
+            }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+            }
+            try await group.next()
+            group.cancelAll()
+        }
     }
 
     private func fullScreenAttribute() -> CFString {
