@@ -1,21 +1,25 @@
+import ServiceManagement
 import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.openWindow) private var openWindow
 
+    @State private var hoveredDisplay: DisplayInfo?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
-            VStack(alignment: .leading, spacing: 4) {
+            HStack {
                 Text("Prism")
                     .font(.title2.bold())
-                if appState.lastMessage != "Ready" {
-                    Text(appState.lastMessage)
+                Spacer()
+                Toggle(isOn: launchAtLoginBinding) {
+                    Text("Launch at Login")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(2)
                 }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
             }
 
             // Auto-apply toggle
@@ -60,11 +64,20 @@ struct MenuBarView: View {
         .frame(width: 400)
     }
 
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { SMAppService.mainApp.status == .enabled },
+            set: { newValue in
+                try? newValue ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+            }
+        )
+    }
+
     private var displayLayout: some View {
         let displays = DisplayInfo.availableDisplays()
 
         return VStack(alignment: .leading, spacing: 6) {
-            Text("Click a display to move the focused window")
+            Label("Click a display to move the focused window", systemImage: "rectangle.2.swap")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -78,6 +91,7 @@ struct MenuBarView: View {
                     displays: displays,
                     focusedAppDescriptor: appState.currentAppDescriptor,
                     isHandlingMove: appState.isHandlingMove,
+                    hoveredDisplay: $hoveredDisplay,
                     onSelect: moveFocusedWindow(to:)
                 )
                 .frame(height: 200)
@@ -86,8 +100,53 @@ struct MenuBarView: View {
                         .fill(Color.secondary.opacity(0.06))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                // Detail bar below the layout
+                displayDetailBar(displays: displays)
             }
         }
+    }
+
+    private func displayDetailBar(displays: [DisplayInfo]) -> some View {
+        let display = hoveredDisplay ?? displays.first(where: { isAppOnDisplay($0) })
+
+        return HStack(spacing: 8) {
+            if let display {
+                Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(display.name)
+                    .font(.caption.weight(.semibold))
+                Text("\(Int(display.frame.width))×\(Int(display.frame.height))")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text("Hover over a display for details")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+        }
+    }
+
+    private func isAppOnDisplay(_ display: DisplayInfo) -> Bool {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            return false
+        }
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        guard let windowObj = appElement.optionalValue(for: kAXFocusedWindowAttribute as CFString),
+              CFGetTypeID(windowObj) == AXUIElementGetTypeID() else {
+            return false
+        }
+        let window = unsafeDowncast(windowObj, to: AXUIElement.self)
+        guard let position = cgPoint(from: window.optionalValue(for: kAXPositionAttribute as CFString)),
+              let size = cgSize(from: window.optionalValue(for: kAXSizeAttribute as CFString)) else {
+            return false
+        }
+        let frame = CGRect(origin: position, size: size)
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        return display.frame.contains(center)
     }
 
     private func moveFocusedWindow(to displayID: CGDirectDisplayID) {
@@ -140,6 +199,7 @@ private struct MenuBarDisplayLayoutView: View {
     let displays: [DisplayInfo]
     let focusedAppDescriptor: AppDescriptor?
     let isHandlingMove: Bool
+    @Binding var hoveredDisplay: DisplayInfo?
     let onSelect: (CGDirectDisplayID) -> Void
 
     @State private var hoveredDisplayID: CGDirectDisplayID?
@@ -154,69 +214,20 @@ private struct MenuBarDisplayLayoutView: View {
                     let isFocusedHere = isAppOnDisplay(display)
                     let isHovered = hoveredDisplayID == display.id
 
-                    Button {
-                        onSelect(display.id)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 0) {
-                            HStack(spacing: 4) {
-                                Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(display.name)
-                                    .font(.caption.weight(.semibold))
-                                    .lineLimit(1)
-                            }
-
-                            Spacer(minLength: 0)
-
-                            if isFocusedHere, let app = focusedAppDescriptor {
-                                HStack(spacing: 6) {
-                                    if let icon = app.icon {
-                                        Image(nsImage: icon)
-                                            .resizable()
-                                            .interpolation(.high)
-                                            .frame(width: 22, height: 22)
-                                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                                    }
-                                    Text(app.displayName)
-                                        .font(.caption.weight(.medium))
-                                        .lineLimit(1)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.accentColor.opacity(0.15))
-                                )
-                            } else if !isFocusedHere {
-                                Text("Click to move here")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                                    .opacity(isHovered ? 1 : 0)
-                            }
-                        }
-                        .padding(8)
-                        .frame(width: frame.width, height: frame.height, alignment: .topLeading)
-                        .background {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(isFocusedHere
-                                    ? Color.accentColor.opacity(0.1)
-                                    : isHovered
-                                        ? Color.secondary.opacity(0.18)
-                                        : Color.secondary.opacity(0.08))
-                        }
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(
-                                    isFocusedHere ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.2),
-                                    lineWidth: isFocusedHere ? 1.5 : 1
-                                )
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isHandlingMove)
+                    DisplayTileButton(
+                        display: display,
+                        focusedApp: isFocusedHere ? focusedAppDescriptor : nil,
+                        isHovered: isHovered,
+                        isFocusedHere: isFocusedHere,
+                        tileFrame: frame,
+                        isDisabled: isHandlingMove,
+                        onSelect: { onSelect(display.id) }
+                    )
                     .onHover { hovering in
-                        hoveredDisplayID = hovering ? display.id : nil
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            hoveredDisplayID = hovering ? display.id : nil
+                            hoveredDisplay = hovering ? display : nil
+                        }
                     }
                     .position(x: frame.midX, y: frame.midY)
                 }
@@ -226,7 +237,94 @@ private struct MenuBarDisplayLayoutView: View {
         .contentShape(Rectangle())
     }
 
-    private func isAppOnDisplay(_ display: DisplayInfo) -> Bool {
+}
+
+private struct DisplayTileButton: View {
+    let display: DisplayInfo
+    let focusedApp: AppDescriptor?
+    let isHovered: Bool
+    let isFocusedHere: Bool
+    let tileFrame: CGRect
+    let isDisabled: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            ZStack {
+                tileContent
+            }
+            .frame(width: tileFrame.width, height: tileFrame.height)
+            .background { tileBackground }
+            .overlay { tileBorder }
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+    }
+
+    @ViewBuilder
+    private var tileContent: some View {
+        if isHovered {
+            hoverContent
+        } else if let app = focusedApp {
+            appBadge(app)
+        }
+    }
+
+    private var hoverContent: some View {
+        VStack(spacing: 4) {
+            Text(display.name)
+                .font(.callout.weight(.semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+
+            if isFocusedHere {
+                Label("Current display", systemImage: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+            } else {
+                Label("Move here", systemImage: "arrow.right.circle")
+                    .font(.caption2)
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+        .padding(6)
+    }
+
+    private func appBadge(_ app: AppDescriptor) -> some View {
+        HStack(spacing: 6) {
+            if let icon = app.icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 24, height: 24)
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            }
+            Text(app.displayName)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+        }
+    }
+
+    private var tileBackground: some View {
+        let fill: Color = isFocusedHere
+            ? Color.accentColor.opacity(isHovered ? 0.18 : 0.1)
+            : isHovered
+                ? Color.secondary.opacity(0.18)
+                : Color.secondary.opacity(0.08)
+        return RoundedRectangle(cornerRadius: 10, style: .continuous).fill(fill)
+    }
+
+    private var tileBorder: some View {
+        let stroke: Color = isFocusedHere
+            ? Color.accentColor.opacity(0.5)
+            : Color.secondary.opacity(isHovered ? 0.4 : 0.2)
+        let width: CGFloat = isFocusedHere ? 1.5 : 1
+        return RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(stroke, lineWidth: width)
+    }
+}
+
+private extension MenuBarDisplayLayoutView {
+    func isAppOnDisplay(_ display: DisplayInfo) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
             return false

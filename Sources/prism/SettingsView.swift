@@ -178,6 +178,15 @@ struct SettingsView: View {
             }
             .toggleStyle(.switch)
             .controlSize(.small)
+
+            if !appState.currentLayoutRules.isEmpty {
+                Toggle(isOn: $appState.autoApplyRules) {
+                    Label("Auto-apply rules on focus", systemImage: "bolt.fill")
+                        .font(.callout)
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
