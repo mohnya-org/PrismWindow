@@ -296,6 +296,7 @@ final class AppState: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                self?.refreshPermissions(prompt: false)
                 self?.refreshCurrentAppDescriptor()
                 self?.refreshRunningApps()
                 await self?.applyRuleForFrontmostAppIfNeeded()
