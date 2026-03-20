@@ -8,6 +8,7 @@ struct MoveResult {
 enum WindowMoveError: LocalizedError {
     case noDisplays
     case noFrontmostApp
+    case ownAppWindow
     case noFocusedWindow
     case displayNotFound
     case unsupportedWindow
@@ -18,6 +19,8 @@ enum WindowMoveError: LocalizedError {
             return "No secondary display is available."
         case .noFrontmostApp:
             return "No frontmost app found."
+        case .ownAppWindow:
+            return "Prism's own windows cannot be moved."
         case .noFocusedWindow:
             return "The frontmost app does not expose a focused window."
         case .displayNotFound:
@@ -60,6 +63,9 @@ struct WindowMover {
     private func focusedWindowContext() throws -> (window: AXUIElement, frame: CGRect, isFullScreen: Bool) {
         guard let app = NSWorkspace.shared.frontmostApplication else {
             throw WindowMoveError.noFrontmostApp
+        }
+        guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            throw WindowMoveError.ownAppWindow
         }
 
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
