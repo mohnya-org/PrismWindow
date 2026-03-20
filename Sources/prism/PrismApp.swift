@@ -17,7 +17,7 @@ struct PrismApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appState)
-                .frame(width: 520, height: 360)
+                .frame(minWidth: 860, minHeight: 720)
         }
     }
 }

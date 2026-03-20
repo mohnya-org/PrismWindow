@@ -32,6 +32,28 @@ enum WindowMoveError: LocalizedError {
 }
 
 struct WindowMover {
+    func focusedWindowMatches(displayID: CGDirectDisplayID, mode: DisplayWindowMode) throws -> Bool {
+        let displays = DisplayInfo.availableDisplays()
+        guard let target = displays.first(where: { $0.id == displayID }) else {
+            throw WindowMoveError.displayNotFound
+        }
+
+        let context = try focusedWindowContext()
+        let current = displayForWindowFrame(context.frame, displays: displays) ?? target
+        guard current.id == target.id else {
+            return false
+        }
+
+        switch mode {
+        case .keepCurrent:
+            return true
+        case .fullscreen:
+            return context.isFullScreen
+        case .windowed:
+            return !context.isFullScreen
+        }
+    }
+
     func moveFocusedWindowToNextDisplay() async throws -> MoveResult {
         let displays = DisplayInfo.availableDisplays()
         guard displays.count > 1 else {
@@ -44,20 +66,29 @@ struct WindowMover {
             throw WindowMoveError.displayNotFound
         }
         let nextDisplay = displays[(currentIndex + 1) % displays.count]
-        return try await move(window: context.window, from: context.frame, to: nextDisplay)
+        return try await move(window: context.window, from: context.frame, to: nextDisplay, mode: .keepCurrent)
     }
 
-    func moveFocusedWindow(to displayID: CGDirectDisplayID) async throws -> MoveResult {
+    func moveFocusedWindow(to displayID: CGDirectDisplayID, mode: DisplayWindowMode = .keepCurrent) async throws -> MoveResult {
         let displays = DisplayInfo.availableDisplays()
         guard let target = displays.first(where: { $0.id == displayID }) else {
             throw WindowMoveError.displayNotFound
         }
         let context = try focusedWindowContext()
         let current = displayForWindowFrame(context.frame, displays: displays) ?? target
-        guard current.id != target.id else {
+        let requiresModeChange = switch mode {
+        case .keepCurrent:
+            false
+        case .fullscreen:
+            !context.isFullScreen
+        case .windowed:
+            context.isFullScreen
+        }
+
+        guard current.id != target.id || requiresModeChange else {
             return MoveResult(message: "Already on \(target.name).")
         }
-        return try await move(window: context.window, from: context.frame, to: target)
+        return try await move(window: context.window, from: context.frame, to: target, mode: mode)
     }
 
     private func focusedWindowContext() throws -> (window: AXUIElement, frame: CGRect, isFullScreen: Bool) {
@@ -84,11 +115,27 @@ struct WindowMover {
         return (focusedWindow, CGRect(origin: position, size: size), isFullScreen)
     }
 
-    private func move(window: AXUIElement, from frame: CGRect, to targetDisplay: DisplayInfo) async throws -> MoveResult {
+    private func move(window: AXUIElement, from frame: CGRect, to targetDisplay: DisplayInfo, mode: DisplayWindowMode) async throws -> MoveResult {
         let wasFullScreen = (window.optionalValue(for: fullScreenAttribute()) as? NSNumber)?.boolValue ?? false
         let app = NSWorkspace.shared.frontmostApplication
+        let shouldEndFullScreen = switch mode {
+        case .keepCurrent:
+            wasFullScreen
+        case .windowed:
+            wasFullScreen
+        case .fullscreen:
+            wasFullScreen
+        }
+        let shouldEnterFullScreen = switch mode {
+        case .keepCurrent:
+            wasFullScreen
+        case .windowed:
+            false
+        case .fullscreen:
+            true
+        }
 
-        if wasFullScreen {
+        if shouldEndFullScreen {
             // Hide the app so the fullscreen exit/re-enter animations are invisible.
             app?.hide()
 
@@ -100,12 +147,12 @@ struct WindowMover {
         try window.setValue(pointValue(targetRect.origin), for: kAXPositionAttribute as CFString)
         try window.setValue(sizeValue(targetRect.size), for: kAXSizeAttribute as CFString)
 
-        if wasFullScreen {
+        if shouldEnterFullScreen {
             try window.setValue(kCFBooleanTrue, for: fullScreenAttribute())
             try await waitForFullScreenState(of: window, expected: true)
             // Bring the app back to the foreground after fullscreen is restored.
             app?.activate()
-            return MoveResult(message: "Moved fullscreen window to \(targetDisplay.name) via fallback.")
+            return MoveResult(message: "Moved window to \(targetDisplay.name) in fullscreen.")
         }
 
         let targetName = targetDisplay.name
