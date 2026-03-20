@@ -14,11 +14,14 @@ struct PrismApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
+        Window("Prism Settings", id: "settings") {
             SettingsView()
                 .environmentObject(appState)
-                .frame(minWidth: 860, minHeight: 720)
+                .frame(minWidth: 780, minHeight: 520)
+                .toolbar(.hidden)
         }
+        .defaultSize(width: 860, height: 600)
+        .windowResizability(.contentMinSize)
     }
 }
 
