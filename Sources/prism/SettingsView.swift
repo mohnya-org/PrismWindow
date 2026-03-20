@@ -29,12 +29,13 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Settings section", selection: $selectedTab) {
+            Picker("Tab", selection: $selectedTab) {
                 ForEach(SettingsTab.allCases, id: \.rawValue) { tab in
                     Text(tab.title).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .frame(maxWidth: 320)
             .padding(.vertical, 10)
 
@@ -177,6 +178,15 @@ struct SettingsView: View {
             }
             .toggleStyle(.switch)
             .controlSize(.small)
+
+            if !appState.currentLayoutRules.isEmpty {
+                Toggle(isOn: $appState.autoApplyRules) {
+                    Label("Auto-apply rules on focus", systemImage: "bolt.fill")
+                        .font(.callout)
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -309,7 +319,6 @@ struct SettingsView: View {
                                     .interpolation(.high)
                                     .frame(width: 18, height: 18)
                                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                                    .opacity(1)
                             }
                             if rule != nil {
                                 Circle()
