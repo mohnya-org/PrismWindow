@@ -29,9 +29,8 @@ struct MenuBarView: View {
             moveSection
 
             HStack {
-                Button("Settings…") {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                    NSApp.activate(ignoringOtherApps: true)
+                SettingsLink {
+                    Text("Settings…")
                 }
 
                 Spacer()
@@ -140,6 +139,8 @@ struct MenuBarView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(.regularMaterial)
             }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
             Text("Displays are shown in the current arrangement. Click a screen to move the focused window there.")
                 .font(.caption)
@@ -251,6 +252,8 @@ private struct DisplayLayoutSelectorView: View {
                 }
             }
         }
+        .clipped()
+        .contentShape(Rectangle())
     }
 }
 
