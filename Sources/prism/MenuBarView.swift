@@ -16,6 +16,7 @@ struct MenuBarView: View {
     }
 
     @EnvironmentObject private var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("menuBarMoveViewStyle") private var moveViewStyleRawValue = MoveViewStyle.buttons.rawValue
 
     var body: some View {
@@ -37,8 +38,8 @@ struct MenuBarView: View {
             moveSection
 
             HStack {
-                SettingsLink {
-                    Text("Settings…")
+                Button("Settings…") {
+                    openSettings()
                 }
 
                 Spacer()
@@ -202,6 +203,11 @@ struct MenuBarView: View {
         Task {
             await appState.moveFocusedWindow(to: displayID)
         }
+    }
+
+    private func openSettings() {
+        openWindow(id: "settings")
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 

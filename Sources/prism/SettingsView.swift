@@ -1,3 +1,4 @@
+import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
@@ -27,39 +28,37 @@ struct SettingsView: View {
     @State private var profileNameDraft = ""
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("Settings section", selection: $selectedTab) {
-                    ForEach(SettingsTab.allCases, id: \.rawValue) { tab in
-                        Text(tab.title).tag(tab)
-                    }
+        VStack(spacing: 0) {
+            Picker("Settings section", selection: $selectedTab) {
+                ForEach(SettingsTab.allCases, id: \.rawValue) { tab in
+                    Text(tab.title).tag(tab)
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 320)
+            .padding(.vertical, 10)
 
-                switch selectedTab {
-                case .overview:
-                    overviewContent
-                case .rules:
-                    rulesEditor
-                case .layouts:
-                    List { savedLayoutsSection }
-                }
+            Divider()
+
+            switch selectedTab {
+            case .overview:
+                overviewContent
+            case .rules:
+                rulesEditor
+            case .layouts:
+                savedLayoutsList
             }
-            .navigationTitle("Prism Settings")
-            .onAppear(perform: focusSettingsWindow)
-            .onAppear(perform: syncSelections)
-            .onChange(of: appState.runningApps) { _, _ in syncSelections() }
-            .onChange(of: appState.displays) { _, _ in syncSelections() }
-            .onChange(of: appState.selectedProfileID) { _, _ in
-                profileNameDraft = appState.selectedProfile.name
-            }
-            .onChange(of: appState.currentAppDescriptor?.bundleIdentifier) { _, newValue in
-                if let newValue, appState.runningApps.contains(where: { $0.bundleIdentifier == newValue }) {
-                    selectedBundleIdentifier = newValue
-                }
+        }
+        .onAppear(perform: focusSettingsWindow)
+        .onAppear(perform: syncSelections)
+        .onChange(of: appState.runningApps) { _, _ in syncSelections() }
+        .onChange(of: appState.displays) { _, _ in syncSelections() }
+        .onChange(of: appState.selectedProfileID) { _, _ in
+            profileNameDraft = appState.selectedProfile.name
+        }
+        .onChange(of: appState.currentAppDescriptor?.bundleIdentifier) { _, newValue in
+            if let newValue, appState.runningApps.contains(where: { $0.bundleIdentifier == newValue }) {
+                selectedBundleIdentifier = newValue
             }
         }
     }
@@ -85,260 +84,287 @@ struct SettingsView: View {
         appState.currentAppDescriptor?.displayName ?? "No focused app"
     }
 
+    // MARK: - Overview
+
     private var overviewContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                overviewHero
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 overviewMetrics
                 overviewStatusCard
-                overviewDisplaysCard
             }
-            .padding(16)
+            overviewDisplaysCard
+            Spacer(minLength: 0)
         }
-    }
-
-    private var overviewHero: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Workspace Overview")
-                .font(.largeTitle.weight(.semibold))
-            Text("Current display setup, permissions, and active placement context.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(
-            LinearGradient(
-                colors: [Color.blue.opacity(0.18), Color.cyan.opacity(0.08)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(16)
     }
 
     private var overviewMetrics: some View {
-        HStack(alignment: .top, spacing: 14) {
-            overviewMetricCard(
-                title: "Accessibility",
-                value: appState.isAccessibilityTrusted ? "Granted" : "Missing",
-                symbol: appState.isAccessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill",
-                tint: appState.isAccessibilityTrusted ? .green : .orange
-            )
-            overviewMetricCard(
-                title: "Displays",
-                value: "\(appState.displays.count)",
-                symbol: "display.2",
-                tint: .blue
-            )
-            overviewMetricCard(
-                title: "Rules",
-                value: "\(appState.currentLayoutRules.count)",
-                symbol: "square.grid.2x2.fill",
-                tint: .indigo
-            )
-            overviewMetricCard(
-                title: "Focused App",
-                value: currentAppName,
-                symbol: "app.fill",
-                tint: .teal
-            )
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                compactMetric(
+                    title: "Accessibility",
+                    value: appState.isAccessibilityTrusted ? "Granted" : "Missing",
+                    symbol: appState.isAccessibilityTrusted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill",
+                    tint: appState.isAccessibilityTrusted ? .green : .orange
+                )
+                compactMetric(
+                    title: "Displays",
+                    value: "\(appState.displays.count)",
+                    symbol: "display.2",
+                    tint: .blue
+                )
+            }
+            HStack(spacing: 10) {
+                compactMetric(
+                    title: "Rules",
+                    value: "\(appState.currentLayoutRules.count)",
+                    symbol: "square.grid.2x2.fill",
+                    tint: .indigo
+                )
+                compactMetric(
+                    title: "Focused App",
+                    value: currentAppName,
+                    symbol: "app.fill",
+                    tint: .teal
+                )
+            }
         }
+        .frame(maxWidth: .infinity)
     }
 
-    private func overviewMetricCard(title: String, value: String, symbol: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func compactMetric(title: String, value: String, symbol: String, tint: Color) -> some View {
+        HStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.title3)
+                .font(.body)
                 .foregroundStyle(tint)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
-        .padding(16)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardBackground)
     }
 
     private var overviewStatusCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Status")
-                .font(.headline)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
 
-            HStack(alignment: .top, spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Shortcut")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
-                    Text("Ctrl + Opt + Cmd + F")
-                        .font(.headline)
+                    Text("⌃⌥⌘F")
+                        .font(.callout.weight(.semibold))
                 }
 
-                Divider()
+                Divider().frame(height: 28)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Display setup")
-                        .font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Layout")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text(appState.currentLayoutName)
-                        .font(.headline)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Latest result")
-                    .font(.caption)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Latest")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                 Text(appState.lastMessage)
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .font(.caption)
+                    .lineLimit(2)
             }
+
+            Divider()
+
+            Toggle(isOn: launchAtLoginBinding) {
+                Text("Launch at Login")
+                    .font(.callout)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
         }
-        .padding(18)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(cardBackground)
     }
 
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { SMAppService.mainApp.status == .enabled },
+            set: { newValue in
+                do {
+                    if newValue {
+                        try SMAppService.mainApp.register()
+                    } else {
+                        try SMAppService.mainApp.unregister()
+                    }
+                } catch {
+                    appState.lastMessage = "Launch at Login failed: \(error.localizedDescription)"
+                }
+            }
+        )
+    }
+
     private var overviewDisplaysCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Display Setup")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Displays")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
 
             if appState.displays.isEmpty {
                 Text("No displays detected.")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(Array(appState.displays.enumerated()), id: \.element.persistentID) { index, display in
-                    HStack(spacing: 12) {
-                        Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 22)
+                HStack(spacing: 10) {
+                    ForEach(Array(appState.displays.enumerated()), id: \.element.persistentID) { index, display in
+                        HStack(spacing: 10) {
+                            Image(systemName: display.isBuiltIn ? "laptopcomputer" : "display")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Display \(index + 1)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(display.name)
-                                .font(.headline)
-                            Text("\(Int(display.frame.width)) × \(Int(display.frame.height))")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(display.name)
+                                    .font(.callout.weight(.semibold))
+                                    .lineLimit(1)
+                                Text("\(Int(display.frame.width))×\(Int(display.frame.height))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
                         }
-
-                        Spacer()
+                        .padding(10)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.secondary.opacity(0.08))
+                        )
                     }
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.secondary.opacity(0.08))
-                    )
                 }
             }
         }
-        .padding(18)
+        .padding(12)
         .background(cardBackground)
     }
+
+    // MARK: - Rules Editor
 
     private var rulesEditor: some View {
         HStack(spacing: 0) {
             rulesSidebar
-                .frame(width: 260)
+                .frame(width: 240)
 
             Divider()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    profileCard
+            VStack(spacing: 0) {
+                // Profile bar
+                profileBar
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+
+                Divider()
+
+                // Rule editor + canvas
+                VStack(spacing: 10) {
                     selectionCard
                     setupCanvasCard
-                    currentLayoutAssignmentsCard
                 }
-                .padding(16)
+                .padding(12)
             }
         }
     }
 
-    private var profileCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Setup Profile")
-                .font(.headline)
-
-            HStack(spacing: 12) {
-                Picker("Setup profile", selection: selectedProfileBinding) {
-                    ForEach(appState.currentProfiles) { profile in
-                        Text(profile.name).tag(profile.id)
-                    }
+    private var profileBar: some View {
+        HStack(spacing: 8) {
+            Picker("Profile", selection: selectedProfileBinding) {
+                ForEach(appState.currentProfiles) { profile in
+                    Text(profile.name).tag(profile.id)
                 }
-                .frame(maxWidth: 280)
-
-                Button("New Profile") {
-                    appState.createProfile()
-                }
-
-                Button("Delete Profile") {
-                    appState.deleteSelectedProfile()
-                }
-                .disabled(appState.currentProfiles.count <= 1)
-
-                Spacer()
             }
+            .frame(maxWidth: 180)
 
-            HStack(spacing: 12) {
-                TextField("Profile name", text: $profileNameDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
+            TextField("Name", text: $profileNameDraft)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 140)
 
-                Button("Rename") {
-                    appState.renameSelectedProfile(to: profileNameDraft)
-                    profileNameDraft = appState.selectedProfile.name
-                }
-                .disabled(profileNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || profileNameDraft == appState.selectedProfile.name)
+            Button("Rename") {
+                appState.renameSelectedProfile(to: profileNameDraft)
+                profileNameDraft = appState.selectedProfile.name
             }
+            .controlSize(.small)
+            .disabled(profileNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || profileNameDraft == appState.selectedProfile.name)
 
-            Text("Multiple profiles can exist for the same physical display setup. The selected profile is the one that auto-applies.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Spacer()
+
+            Button {
+                appState.createProfile()
+            } label: {
+                Image(systemName: "plus")
+            }
+            .controlSize(.small)
+
+            Button {
+                appState.deleteSelectedProfile()
+            } label: {
+                Image(systemName: "trash")
+            }
+            .controlSize(.small)
+            .disabled(appState.currentProfiles.count <= 1)
         }
-        .padding(16)
-        .background(cardBackground)
     }
 
     private var rulesSidebar: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
+            HStack {
                 Text("Apps")
                     .font(.headline)
-                Text("Choose an app to edit its placement rule.")
+                Spacer()
+                Text("\(appState.currentLayoutRules.count) rules")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
 
             List(selection: $selectedBundleIdentifier) {
                 ForEach(appState.runningApps) { app in
                     let rule = appState.currentLayoutRules.first(where: { $0.bundleIdentifier == app.bundleIdentifier })
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         if let icon = app.icon {
                             Image(nsImage: icon)
                                 .resizable()
                                 .interpolation(.high)
-                                .frame(width: 20, height: 20)
-                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                .frame(width: 18, height: 18)
+                                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                         }
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(app.displayName)
+                                .font(.callout)
                                 .lineLimit(1)
-                            Text(rule.map { "\(selectedProfileName): \($0.targetDisplayName) • \($0.windowMode.label)" } ?? "No rule")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                            if let rule {
+                                Text("\(rule.targetDisplayName) • \(rule.windowMode.label)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                     }
                     .tag(app.bundleIdentifier)
@@ -348,171 +374,96 @@ struct SettingsView: View {
     }
 
     private var selectionCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Rule Editor")
-                .font(.headline)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Fullscreen")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(selectedMode == .fullscreen ? "The app will be placed in fullscreen." : "The app will be placed as a normal window.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Toggle("Fullscreen", isOn: fullscreenBinding)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-            }
-
+        HStack(spacing: 12) {
             if let selectedApp {
-                HStack(spacing: 10) {
-                    if let icon = selectedApp.icon {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .interpolation(.high)
-                            .frame(width: 28, height: 28)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(selectedApp.displayName)
-                            .font(.headline)
-                        if let selectedDisplay {
-                            Text("Pending: \(selectedDisplay.name) • \(selectedMode.label)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let selectedRule {
-                            Text("Current rule: \(selectedRule.targetDisplayName) • \(selectedRule.windowMode.label)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("No rule saved for this app in the current display setup.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Spacer()
-
-                    if let selectedRule {
-                        Button("Remove Rule") {
-                            appState.removeRule(selectedRule)
-                        }
-                    }
-
-                    Button("Save") {
-                        saveSelectedRule()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(selectedDisplay == nil)
+                if let icon = selectedApp.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 24, height: 24)
+                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selectedApp.displayName)
+                        .font(.callout.weight(.semibold))
+                    if let selectedRule {
+                        Text("Rule: \(selectedRule.targetDisplayName) • \(selectedRule.windowMode.label)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No rule — click a display below to assign")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Text("Select an app from the sidebar")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
+
+            Spacer()
+
+            Toggle("Fullscreen", isOn: fullscreenBinding)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+
+            if let selectedRule {
+                Button("Remove") {
+                    appState.removeRule(selectedRule)
+                }
+                .controlSize(.small)
+            }
+
+            Button("Save") {
+                saveSelectedRule()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(selectedDisplay == nil || selectedApp == nil)
         }
-        .padding(16)
+        .padding(10)
         .background(cardBackground)
     }
 
     private var setupCanvasCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Click a display to assign the selected app")
-                .font(.headline)
-
-            Text("The canvas matches the current display setup. Select an app and mode, then click the target display.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            DisplaySetupAssignmentCanvas(
-                displays: appState.displays,
-                rules: appState.currentLayoutRules,
-                selectedBundleIdentifier: selectedBundleIdentifier,
-                selectedDisplayPersistentID: selectedDisplayPersistentID,
-                selectedMode: selectedMode,
-                onSelectDisplay: selectDisplay(_: )
-            )
-            .frame(height: 280)
-            .background(cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        }
-    }
-
-    private var currentLayoutAssignmentsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Assignments in this display setup")
-                .font(.headline)
-            Text("Profile: \(selectedProfileName)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if appState.currentLayoutRules.isEmpty {
-                Text("No rules configured for the selected profile.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(appState.currentLayoutRules) { rule in
-                    HStack(alignment: .top) {
-                        HStack(spacing: 10) {
-                            if let icon = icon(for: rule.bundleIdentifier) {
-                                Image(nsImage: icon)
-                                    .resizable()
-                                    .interpolation(.high)
-                                    .frame(width: 24, height: 24)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            }
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(rule.appName)
-                                Text("\(rule.targetDisplayName) • \(rule.windowMode.label)")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        Spacer()
-
-                        HStack(spacing: 10) {
-                            Toggle("Fullscreen", isOn: assignmentModeBinding(for: rule))
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-
-                            Button("Remove") {
-                                appState.removeRule(rule)
-                            }
-                        }
-                    }
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.secondary.opacity(0.08))
-                    )
-                }
-            }
-        }
-        .padding(16)
+        DisplaySetupAssignmentCanvas(
+            displays: appState.displays,
+            rules: appState.currentLayoutRules,
+            selectedBundleIdentifier: selectedBundleIdentifier,
+            selectedDisplayPersistentID: selectedDisplayPersistentID,
+            selectedMode: selectedMode,
+            onSelectDisplay: selectDisplay(_:)
+        )
+        .frame(maxHeight: .infinity)
         .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private var savedLayoutsSection: some View {
-        Section("All saved display setups") {
-            if appState.savedLayouts.isEmpty {
-                Text("No saved display setups yet.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(appState.savedLayouts) { layout in
-                    layoutBlock(layout)
+    // MARK: - Display Setups
+
+    private var savedLayoutsList: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                if appState.savedLayouts.isEmpty {
+                    Text("No saved display setups yet.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ForEach(appState.savedLayouts) { layout in
+                        layoutDisclosure(layout)
+                    }
                 }
             }
+            .padding(16)
         }
     }
+
+    // MARK: - Helpers
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(.regularMaterial)
     }
 
@@ -527,18 +478,6 @@ struct SettingsView: View {
         Binding(
             get: { appState.selectedProfileID },
             set: { appState.selectProfile(id: $0) }
-        )
-    }
-
-    private func assignmentModeBinding(for rule: DisplayRule) -> Binding<Bool> {
-        Binding(
-            get: { rule.windowMode == .fullscreen },
-            set: { isFullscreen in
-                appState.updateRuleMode(rule, to: isFullscreen ? .fullscreen : .windowed)
-                if selectedBundleIdentifier == rule.bundleIdentifier {
-                    selectedMode = isFullscreen ? .fullscreen : .windowed
-                }
-            }
         )
     }
 
@@ -580,41 +519,83 @@ struct SettingsView: View {
             ?? (appState.currentAppDescriptor?.bundleIdentifier == bundleIdentifier ? appState.currentAppDescriptor?.icon : nil)
     }
 
-    @ViewBuilder
-    private func layoutBlock(_ layout: SavedDisplayLayout) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(layout.name)
-                        .font(.headline)
-                    if layout.signature == appState.currentLayoutSignature {
-                        Text("Current setup")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                Text("\(layout.rules.count) rules")
+    private func layoutDisclosure(_ layout: SavedDisplayLayout) -> some View {
+        DisclosureGroup {
+            if layout.rules.isEmpty {
+                Text("No rules in this setup.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
+                    .padding(.vertical, 6)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(layout.rules) { rule in
+                        HStack(spacing: 10) {
+                            if let icon = icon(for: rule.bundleIdentifier) {
+                                Image(nsImage: icon)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .frame(width: 20, height: 20)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                            }
 
-            ForEach(layout.rules) { rule in
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(rule.appName)
-                        Text("\(rule.profileName) • \(rule.targetDisplayName) • \(rule.windowMode.label)")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Remove") {
-                        appState.removeRule(rule)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(rule.appName)
+                                    .font(.callout)
+                                Text("\(rule.profileName) • \(rule.targetDisplayName) • \(rule.windowMode.label)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                appState.removeRule(rule)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.secondary.opacity(0.06))
+                        )
                     }
                 }
+                .padding(.top, 6)
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: layout.signature == appState.currentLayoutSignature ? "display.2" : "display")
+                    .foregroundStyle(layout.signature == appState.currentLayoutSignature ? .blue : .secondary)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(layout.name)
+                            .font(.callout.weight(.semibold))
+                        if layout.signature == appState.currentLayoutSignature {
+                            Text("Active")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.blue.opacity(0.15)))
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    Text("\(layout.rules.count) rules • \(layout.profiles.count) profiles")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
             }
         }
-        .padding(.vertical, 4)
+        .padding(12)
+        .background(cardBackground)
     }
 }
 
@@ -639,40 +620,40 @@ private struct DisplaySetupAssignmentCanvas: View {
                     Button {
                         onSelectDisplay(display)
                     } label: {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(display.name)
-                                    .font(.headline)
-                                    .lineLimit(2)
+                                    .font(.callout.weight(.semibold))
+                                    .lineLimit(1)
                                 Spacer(minLength: 0)
                                 if isSelectedTarget {
                                     Text(selectedMode.label)
                                         .font(.caption2.weight(.semibold))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
                                         .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                                 }
                             }
 
                             if displayRules.isEmpty {
-                                Text("No app assigned")
-                                    .font(.caption)
+                                Text("No apps assigned")
+                                    .font(.caption2)
                                     .foregroundStyle(.secondary)
                             } else {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    ForEach(displayRules.prefix(4)) { rule in
-                                        HStack(spacing: 6) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    ForEach(displayRules.prefix(5)) { rule in
+                                        HStack(spacing: 4) {
                                             Circle()
                                                 .fill(rule.bundleIdentifier == selectedBundleIdentifier ? Color.accentColor : Color.secondary.opacity(0.35))
-                                                .frame(width: 6, height: 6)
+                                                .frame(width: 5, height: 5)
                                             Text("\(rule.appName) • \(rule.windowMode.label)")
-                                                .font(.caption)
+                                                .font(.caption2)
                                                 .lineLimit(1)
                                         }
                                     }
 
-                                    if displayRules.count > 4 {
-                                        Text("+\(displayRules.count - 4) more")
+                                    if displayRules.count > 5 {
+                                        Text("+\(displayRules.count - 5) more")
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                     }
@@ -680,19 +661,15 @@ private struct DisplaySetupAssignmentCanvas: View {
                             }
 
                             Spacer(minLength: 0)
-
-                            Text("Click to assign selected app here")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
                         }
-                        .padding(12)
+                        .padding(10)
                         .frame(width: frame.width, height: frame.height, alignment: .topLeading)
                         .background {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .fill(isSelectedTarget ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.1))
                         }
                         .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .stroke(isSelectedTarget ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: isSelectedTarget ? 2 : 1)
                         }
                     }
@@ -701,7 +678,7 @@ private struct DisplaySetupAssignmentCanvas: View {
                 }
             }
         }
-        .padding(12)
+        .padding(10)
     }
 }
 
