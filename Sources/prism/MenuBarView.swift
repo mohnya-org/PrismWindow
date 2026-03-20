@@ -71,6 +71,9 @@ struct MenuBarView: View {
         }
         .padding(16)
         .frame(width: 400)
+        .onAppear {
+            appState.refreshPermissions(prompt: false)
+        }
     }
 
     private var launchAtLoginBinding: Binding<Bool> {
