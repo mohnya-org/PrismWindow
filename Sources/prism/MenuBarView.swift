@@ -89,12 +89,13 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                Picker("Move view", selection: moveViewStyleBinding) {
+                Picker("View", selection: moveViewStyleBinding) {
                     ForEach(MoveViewStyle.allCases, id: \.rawValue) { style in
                         Text(style.title).tag(style)
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(width: 180)
             }
 

@@ -29,12 +29,13 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Settings section", selection: $selectedTab) {
+            Picker("Tab", selection: $selectedTab) {
                 ForEach(SettingsTab.allCases, id: \.rawValue) { tab in
                     Text(tab.title).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .frame(maxWidth: 320)
             .padding(.vertical, 10)
 
