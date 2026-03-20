@@ -310,7 +310,6 @@ struct SettingsView: View {
                                     .interpolation(.high)
                                     .frame(width: 18, height: 18)
                                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                                    .opacity(1)
                             }
                             if rule != nil {
                                 Circle()
