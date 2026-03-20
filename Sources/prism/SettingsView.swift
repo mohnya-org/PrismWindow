@@ -303,18 +303,28 @@ struct SettingsView: View {
                     let rule = appState.currentLayoutRules.first(where: { $0.bundleIdentifier == app.bundleIdentifier })
 
                     HStack(spacing: 8) {
-                        if let icon = app.icon {
-                            Image(nsImage: icon)
-                                .resizable()
-                                .interpolation(.high)
-                                .frame(width: 18, height: 18)
-                                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        ZStack(alignment: .bottomTrailing) {
+                            if let icon = app.icon {
+                                Image(nsImage: icon)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .frame(width: 18, height: 18)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                    .opacity(1)
+                            }
+                            if rule != nil {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                    .offset(x: 2, y: 2)
+                            }
                         }
 
                         VStack(alignment: .leading, spacing: 1) {
                             Text(app.displayName)
                                 .font(.callout)
                                 .lineLimit(1)
+                                .foregroundStyle(.primary)
                             if let rule {
                                 Text("\(rule.targetDisplayName) • \(rule.windowMode.label)")
                                     .font(.caption2)
