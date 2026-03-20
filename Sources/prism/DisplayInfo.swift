@@ -10,6 +10,11 @@ struct DisplayInfo: Identifiable, Hashable {
         CGDisplayIsBuiltin(id) != 0
     }
 
+    var persistentID: String {
+        let rect = frame.integral
+        return "\(name)|\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))"
+    }
+
     static func availableDisplays() -> [DisplayInfo] {
         // NSScreen uses bottom-left origin (Y up), but AX APIs use
         // top-left origin (Y down). Convert all frames to AX coordinates.
@@ -44,5 +49,9 @@ struct DisplayInfo: Identifiable, Hashable {
             width: rect.width,
             height: rect.height
         )
+    }
+
+    static func currentLayoutSignature(for displays: [DisplayInfo]) -> String {
+        displays.map(\.persistentID).joined(separator: "||")
     }
 }
