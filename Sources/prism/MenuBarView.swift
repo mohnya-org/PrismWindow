@@ -40,6 +40,12 @@ struct MenuBarView: View {
                 .controlSize(.small)
             }
 
+            Toggle(isOn: $appState.defaultToFullscreenOnMove) {
+                Label("Move in fullscreen by default", systemImage: "arrow.up.left.and.arrow.down.right")
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+
             // Permissions or display layout
             if !appState.isAccessibilityTrusted {
                 VStack(alignment: .leading, spacing: 8) {
@@ -175,7 +181,7 @@ struct MenuBarView: View {
 
     private func moveFocusedWindow(to displayID: CGDirectDisplayID) {
         Task {
-            await appState.moveFocusedWindow(to: displayID)
+            await appState.moveFocusedWindowAndMaybeUpdateRule(to: displayID)
         }
     }
 
@@ -246,9 +252,9 @@ private struct MenuBarDisplayLayoutView: View {
                         isHovered: isHovered,
                         isFocusedHere: isFocusedHere,
                         isLocked: isLocked,
-                        isMovable: !isFocusedHere && !isFocusedAppRuleCompliant && !isHandlingMove,
+                        isMovable: !isFocusedHere && !isHandlingMove,
                         tileFrame: frame,
-                        isDisabled: isHandlingMove || isFocusedAppRuleCompliant,
+                        isDisabled: isHandlingMove,
                         onSelect: { onSelect(display.id) }
                     )
                     .onHover { hovering in

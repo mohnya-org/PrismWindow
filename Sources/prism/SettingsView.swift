@@ -179,6 +179,13 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
 
+            Toggle(isOn: $appState.defaultToFullscreenOnMove) {
+                Label("Move in fullscreen by default", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.callout)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+
             if !appState.currentLayoutRules.isEmpty {
                 Toggle(isOn: $appState.autoApplyRules) {
                     Label("Auto-apply rules on focus", systemImage: "bolt.fill")
@@ -334,7 +341,7 @@ struct SettingsView: View {
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
                             if let rule {
-                                Text("\(rule.targetDisplayName) • \(rule.windowMode.label)")
+                                Text(ruleSummary(rule))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -362,7 +369,7 @@ struct SettingsView: View {
                     Text(selectedApp.displayName)
                         .font(.callout.weight(.semibold))
                     if let selectedRule {
-                        Text("Rule: \(selectedRule.targetDisplayName) • \(selectedRule.windowMode.label)")
+                        Text("Rule: \(ruleSummary(selectedRule))")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     } else {
@@ -512,6 +519,10 @@ struct SettingsView: View {
             ?? (appState.currentAppDescriptor?.bundleIdentifier == bundleIdentifier ? appState.currentAppDescriptor?.icon : nil)
     }
 
+    private func ruleSummary(_ rule: DisplayRule) -> String {
+        return "\(rule.targetDisplayName) • \(rule.windowMode.label)"
+    }
+
     private func layoutDisclosure(_ layout: SavedDisplayLayout) -> some View {
         DisclosureGroup {
             if layout.rules.isEmpty {
@@ -558,7 +569,7 @@ struct SettingsView: View {
                                         VStack(alignment: .leading, spacing: 1) {
                                             Text(rule.appName)
                                                 .font(.callout)
-                                            Text("\(rule.targetDisplayName) • \(rule.windowMode.label)")
+                                            Text(ruleSummary(rule))
                                                 .font(.caption2)
                                                 .foregroundStyle(.secondary)
                                         }
