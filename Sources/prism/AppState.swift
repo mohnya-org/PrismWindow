@@ -8,6 +8,9 @@ final class AppState: ObservableObject {
     @Published var autoApplyRules: Bool = UserDefaults.standard.object(forKey: "autoApplyRules") as? Bool ?? true {
         didSet { UserDefaults.standard.set(autoApplyRules, forKey: "autoApplyRules") }
     }
+    @Published var defaultToFullscreenOnMove: Bool = UserDefaults.standard.object(forKey: "defaultToFullscreenOnMove") as? Bool ?? false {
+        didSet { UserDefaults.standard.set(defaultToFullscreenOnMove, forKey: "defaultToFullscreenOnMove") }
+    }
     @Published var isAccessibilityTrusted = false
     @Published var isHandlingMove = false
     @Published var currentAppDescriptor: AppDescriptor?
@@ -78,6 +81,10 @@ final class AppState: ObservableObject {
                 }
                 return lhs.appName < rhs.appName
             }
+    }
+
+    var defaultMoveMode: DisplayWindowMode {
+        defaultToFullscreenOnMove ? .fullscreen : .windowed
     }
 
     var savedLayouts: [SavedDisplayLayout] {
@@ -212,9 +219,49 @@ final class AppState: ObservableObject {
         }
 
         do {
-            let result = try await windowMover.moveFocusedWindow(to: displayID, mode: .keepCurrent)
+            let result = try await windowMover.moveFocusedWindow(
+                to: displayID,
+                mode: defaultMoveMode
+            )
             lastMessage = result.message
             refreshCurrentAppDescriptor()
+        } catch {
+            lastMessage = error.localizedDescription
+        }
+    }
+
+    func moveFocusedWindowAndMaybeUpdateRule(to displayID: CGDirectDisplayID) async {
+        guard !isHandlingMove else { return }
+        isHandlingMove = true
+        defer { isHandlingMove = false }
+
+        refreshPermissions(prompt: true)
+        guard isAccessibilityTrusted else {
+            lastMessage = "Accessibility permission is required."
+            return
+        }
+
+        do {
+            let moveMode = defaultMoveMode
+            let result = try await windowMover.moveFocusedWindow(
+                to: displayID,
+                mode: moveMode
+            )
+            lastMessage = result.message
+            refreshCurrentAppDescriptor()
+
+            guard autoApplyRules,
+                  let app = currentAppDescriptor,
+                  let targetDisplay = displays.first(where: { $0.id == displayID }) else {
+                return
+            }
+
+            saveRule(
+                app: app,
+                targetDisplayID: targetDisplay.persistentID,
+                mode: moveMode
+            )
+            lastMessage = "Moved \(app.displayName) to \(targetDisplay.name) and updated its rule."
         } catch {
             lastMessage = error.localizedDescription
         }
@@ -368,10 +415,16 @@ final class AppState: ObservableObject {
         }
 
         do {
-            if try windowMover.focusedWindowMatches(displayID: targetDisplay.id, mode: rule.windowMode) {
+            if try windowMover.focusedWindowMatches(
+                displayID: targetDisplay.id,
+                mode: rule.windowMode
+            ) {
                 return
             }
-            let result = try await windowMover.moveFocusedWindow(to: targetDisplay.id, mode: rule.windowMode)
+            let result = try await windowMover.moveFocusedWindow(
+                to: targetDisplay.id,
+                mode: rule.windowMode
+            )
             lastMessage = "Rule applied: \(result.message)"
         } catch {
             lastMessage = "Rule failed: \(error.localizedDescription)"
@@ -474,7 +527,7 @@ enum DisplayWindowMode: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .windowed:
-            return "Windowed"
+            return "Window"
         case .fullscreen:
             return "Fullscreen"
         case .keepCurrent:
@@ -495,4 +548,39 @@ struct DisplayRule: Codable, Identifiable, Hashable {
     let windowMode: DisplayWindowMode
 
     var id: String { "\(layoutSignature)|\(profileID)|\(bundleIdentifier)" }
+
+    init(
+        layoutSignature: String,
+        layoutName: String,
+        profileID: String,
+        profileName: String,
+        bundleIdentifier: String,
+        appName: String,
+        targetDisplayPersistentID: String,
+        targetDisplayName: String,
+        windowMode: DisplayWindowMode
+    ) {
+        self.layoutSignature = layoutSignature
+        self.layoutName = layoutName
+        self.profileID = profileID
+        self.profileName = profileName
+        self.bundleIdentifier = bundleIdentifier
+        self.appName = appName
+        self.targetDisplayPersistentID = targetDisplayPersistentID
+        self.targetDisplayName = targetDisplayName
+        self.windowMode = windowMode
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        layoutSignature = try container.decode(String.self, forKey: .layoutSignature)
+        layoutName = try container.decode(String.self, forKey: .layoutName)
+        profileID = try container.decode(String.self, forKey: .profileID)
+        profileName = try container.decode(String.self, forKey: .profileName)
+        bundleIdentifier = try container.decode(String.self, forKey: .bundleIdentifier)
+        appName = try container.decode(String.self, forKey: .appName)
+        targetDisplayPersistentID = try container.decode(String.self, forKey: .targetDisplayPersistentID)
+        targetDisplayName = try container.decode(String.self, forKey: .targetDisplayName)
+        windowMode = try container.decode(DisplayWindowMode.self, forKey: .windowMode)
+    }
 }

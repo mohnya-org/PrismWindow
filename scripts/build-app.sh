@@ -12,6 +12,10 @@ ICONSET_DIR="$BUILD_DIR/AppIcon.iconset"
 ICON_FILE="$RESOURCES_DIR/AppIcon.icns"
 SOURCE_ICON="$ROOT_DIR/Resources/AppIcon.png"
 PLIST_TEMPLATE="$ROOT_DIR/Resources/Info.plist"
+PLIST_PATH="$CONTENTS_DIR/Info.plist"
+VERSION="${VERSION:-}"
+BUILD_NUMBER="${BUILD_NUMBER:-}"
+CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
 
 if [[ ! -f "$SOURCE_ICON" ]]; then
   echo "Missing source icon: $SOURCE_ICON" >&2
@@ -48,9 +52,17 @@ create_icon 1024 icon_512x512@2x.png
 iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
 
 cp "$RELEASE_DIR/PrismWindow" "$MACOS_DIR/PrismWindow"
-cp "$PLIST_TEMPLATE" "$CONTENTS_DIR/Info.plist"
+cp "$PLIST_TEMPLATE" "$PLIST_PATH"
 chmod +x "$MACOS_DIR/PrismWindow"
 
-codesign --force --deep --sign - "$APP_DIR" >/dev/null
+if [[ -n "$VERSION" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST_PATH"
+fi
+
+if [[ -n "$BUILD_NUMBER" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST_PATH"
+fi
+
+codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP_DIR" >/dev/null
 
 echo "Built app bundle: $APP_DIR"
