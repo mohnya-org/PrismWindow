@@ -17,7 +17,7 @@ enum WindowMoveError: LocalizedError {
         case .noFrontmostApp:
             return "No frontmost app found."
         case .ownAppWindow:
-            return "Prism's own windows cannot be moved."
+            return "PrismWindow's own windows cannot be moved."
         case .noFocusedWindow:
             return "The frontmost app does not expose a focused window."
         case .displayNotFound:

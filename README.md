@@ -1,6 +1,6 @@
-# Prism
+# PrismWindow
 
-Prism is a macOS menu bar app that moves the focused window to the correct display using user-defined rules.
+PrismWindow is a macOS menu bar app that moves the focused window to the correct display using user-defined rules.
 
 ## Features
 
@@ -18,7 +18,7 @@ Run the app from source:
 
 ```bash
 swift build
-swift run Prism
+swift run PrismWindow
 ```
 
 ## Release Build
@@ -32,7 +32,7 @@ Build a distributable `.app` bundle:
 Output:
 
 ```bash
-.build/release/Prism.app
+.build/release/PrismWindow.app
 ```
 
 The app icon source image is stored at:
@@ -50,11 +50,11 @@ The build script converts it into an `.icns` file and places it in the app bundl
 
 ## How It Works
 
-Prism uses the macOS Accessibility API to move windows between displays.
+PrismWindow uses the macOS Accessibility API to move windows between displays.
 
-For normal windows, Prism updates the window position and size directly.
+For normal windows, PrismWindow updates the window position and size directly.
 
-For fullscreen windows, Prism uses a public-API fallback flow:
+For fullscreen windows, PrismWindow uses a public-API fallback flow:
 
 1. Exit fullscreen
 2. Move the window to the target display

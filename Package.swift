@@ -3,12 +3,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "prism",
+    name: "PrismWindow",
     platforms: [
         .macOS(.v14),
     ],
     products: [
-        .executable(name: "Prism", targets: ["prism"]),
+        .executable(name: "PrismWindow", targets: ["prism"]),
     ],
     targets: [
         .executableTarget(

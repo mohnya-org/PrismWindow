@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/.build"
 RELEASE_DIR="$BUILD_DIR/release"
-APP_DIR="$RELEASE_DIR/Prism.app"
+APP_DIR="$RELEASE_DIR/PrismWindow.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
@@ -47,9 +47,9 @@ create_icon 1024 icon_512x512@2x.png
 
 iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
 
-cp "$RELEASE_DIR/Prism" "$MACOS_DIR/Prism"
+cp "$RELEASE_DIR/PrismWindow" "$MACOS_DIR/PrismWindow"
 cp "$PLIST_TEMPLATE" "$CONTENTS_DIR/Info.plist"
-chmod +x "$MACOS_DIR/Prism"
+chmod +x "$MACOS_DIR/PrismWindow"
 
 codesign --force --deep --sign - "$APP_DIR" >/dev/null
 
