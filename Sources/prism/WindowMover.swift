@@ -99,6 +99,11 @@ struct WindowMover {
     }
 
     private func move(window: AXUIElement, from frame: CGRect, to targetDisplay: DisplayInfo, mode: DisplayWindowMode) async throws -> MoveResult {
+        // Wait for any in-progress animation (minimize, zoom, etc.) to settle.
+        // The window frame keeps changing during animations, so we poll until
+        // two consecutive reads return the same position and size.
+        try await waitForWindowToSettle(window)
+
         let wasFullScreen = (window.optionalValue(for: fullScreenAttribute()) as? NSNumber)?.boolValue ?? false
         let app = NSWorkspace.shared.frontmostApplication
         let displays = DisplayInfo.availableDisplays()
@@ -199,6 +204,38 @@ struct WindowMover {
             try await group.next()
             group.cancelAll()
         }
+    }
+
+    /// Poll until the window's frame stops changing, indicating that any
+    /// in-progress animation (minimize restore, zoom, space transition, etc.)
+    /// has finished. Throws after a timeout to avoid hanging indefinitely.
+    private func waitForWindowToSettle(_ window: AXUIElement) async throws {
+        let isMinimized = (window.optionalValue(for: kAXMinimizedAttribute as CFString) as? NSNumber)?.boolValue ?? false
+        if isMinimized {
+            // Cannot move a minimized window — wait for it to be restored.
+            for _ in 0..<50 {
+                let still = (window.optionalValue(for: kAXMinimizedAttribute as CFString) as? NSNumber)?.boolValue ?? false
+                if !still { break }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            // Extra grace period for the restore animation.
+            try await Task.sleep(for: .milliseconds(300))
+        }
+
+        var previousFrame: CGRect?
+        for _ in 0..<30 {
+            let pos = cgPoint(from: window.optionalValue(for: kAXPositionAttribute as CFString))
+            let size = cgSize(from: window.optionalValue(for: kAXSizeAttribute as CFString))
+            if let pos, let size {
+                let current = CGRect(origin: pos, size: size)
+                if let prev = previousFrame, prev.equalTo(current) {
+                    return
+                }
+                previousFrame = current
+            }
+            try await Task.sleep(for: .milliseconds(80))
+        }
+        // Timed out — proceed anyway; the move may still succeed.
     }
 
     private func fullScreenAttribute() -> CFString {
