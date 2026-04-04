@@ -7,14 +7,14 @@ struct PrismApp: App {
     @StateObject private var appState = AppState()
 
     var body: some Scene {
-        MenuBarExtra("PrismWindow", systemImage: "display.2") {
+        MenuBarExtra("Prism Window", systemImage: "display.2") {
             MenuBarView()
                 .environmentObject(appState)
                 .frame(width: 400)
         }
         .menuBarExtraStyle(.window)
 
-        Window("PrismWindow Settings", id: "settings") {
+        Window("Prism Window Settings", id: "settings") {
             SettingsView()
                 .environmentObject(appState)
                 .frame(minWidth: 780, minHeight: 520)

@@ -12,7 +12,7 @@ struct MenuBarView: View {
             // Header
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("PrismWindow")
+                    Text("Prism Window")
                         .font(.title2.bold())
                     Spacer()
                     Toggle(isOn: launchAtLoginBinding) {

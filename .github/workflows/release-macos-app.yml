@@ -53,9 +53,9 @@ jobs:
           {
             echo "version=$VERSION"
             echo "tag=$TAG"
-            echo "zip_name=PrismWindow-$VERSION-macOS.zip"
-            echo "zip_path=$GITHUB_WORKSPACE/dist/PrismWindow-$VERSION-macOS.zip"
-            echo "checksum_path=$GITHUB_WORKSPACE/dist/PrismWindow-$VERSION-macOS.zip.sha256"
+            echo "zip_name=Prism Window-$VERSION-macOS.zip"
+            echo "zip_path=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip"
+            echo "checksum_path=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip.sha256"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create release tag if missing
@@ -151,13 +151,13 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           VERSION="$VERSION" BUILD_NUMBER="${GITHUB_RUN_NUMBER}" CODESIGN_IDENTITY="-" ./scripts/build-app.sh
-          rm -rf dist/PrismWindow.app
-          cp -R .build/release/PrismWindow.app dist/PrismWindow.app
+          rm -rf "dist/Prism Window.app"
+          cp -R ".build/release/Prism Window.app" "dist/Prism Window.app"
 
       - name: Verify app architecture
         run: |
           set -euo pipefail
-          APP_BINARY="dist/PrismWindow.app/Contents/MacOS/PrismWindow"
+          APP_BINARY="dist/Prism Window.app/Contents/MacOS/PrismWindow"
           ARCH_INFO="$(file "$APP_BINARY")"
           echo "$ARCH_INFO"
           echo "$ARCH_INFO" | grep -q "arm64"
@@ -165,8 +165,8 @@ jobs:
       - name: Sign app bundle
         run: |
           set -euo pipefail
-          codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "dist/PrismWindow.app"
-          codesign --verify --deep --strict --verbose=2 "dist/PrismWindow.app"
+          codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "dist/Prism Window.app"
+          codesign --verify --deep --strict --verbose=2 "dist/Prism Window.app"
 
       - name: Prepare App Store Connect API key
         env:
@@ -184,7 +184,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          ditto -c -k --keepParent "dist/PrismWindow.app" "$ZIP_PATH"
+          ditto -c -k --keepParent "dist/Prism Window.app" "$ZIP_PATH"
 
       - name: Notarize app archive
         env:
@@ -200,8 +200,8 @@ jobs:
       - name: Staple notarization ticket
         run: |
           set -euo pipefail
-          xcrun stapler staple "dist/PrismWindow.app"
-          xcrun stapler validate "dist/PrismWindow.app"
+          xcrun stapler staple "dist/Prism Window.app"
+          xcrun stapler validate "dist/Prism Window.app"
 
       - name: Recreate release archive and checksum
         env:
@@ -210,7 +210,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -f "$ZIP_PATH" "$CHECKSUM_PATH"
-          ditto -c -k --keepParent "dist/PrismWindow.app" "$ZIP_PATH"
+          ditto -c -k --keepParent "dist/Prism Window.app" "$ZIP_PATH"
           shasum -a 256 "$ZIP_PATH" > "$CHECKSUM_PATH"
 
       - name: Create or update GitHub Release
