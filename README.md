@@ -58,7 +58,7 @@ Resources/Info.plist
 Current app version:
 
 ```bash
-1.2.9
+1.2.10
 ```
 
 ## Updates
