@@ -69,6 +69,10 @@ struct MenuBarView: View {
 
                 Spacer()
 
+                Button("Check for Updates…") {
+                    checkForUpdates()
+                }
+
                 Button("Quit") {
                     NSApp.terminate(nil)
                 }
@@ -188,6 +192,10 @@ struct MenuBarView: View {
     private func openSettings() {
         openWindow(id: "settings")
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func checkForUpdates() {
+        (NSApp.delegate as? AppDelegate)?.checkForUpdates(nil)
     }
 }
 

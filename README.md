@@ -58,8 +58,38 @@ Resources/Info.plist
 Current app version:
 
 ```bash
-1.0.0
+1.1.1
 ```
+
+## Updates
+
+Prism Window uses Sparkle for in-app updates. The appcast is published as a
+GitHub Release asset and read from:
+
+```bash
+https://github.com/mohnya-org/PrismWindow/releases/latest/download/appcast.xml
+```
+
+Generate Sparkle keys once on a trusted Mac:
+
+```bash
+.build/artifacts/sparkle/Sparkle/bin/generate_keys -x sparkle_private_key
+```
+
+Add the printed public key to the GitHub secret:
+
+```bash
+SPARKLE_PUBLIC_ED_KEY
+```
+
+Add the exported private key contents to:
+
+```bash
+SPARKLE_PRIVATE_KEY
+```
+
+Do not commit the private key. Release builds inject the public key into the
+app bundle and use the private key to sign the update archive in `appcast.xml`.
 
 ## Release CI
 
@@ -75,7 +105,8 @@ The workflow:
 - creates a `v<version>` git tag if it does not already exist
 - builds `Prism Window.app`
 - signs and notarizes the app
-- uploads a zip archive and sha256 checksum to GitHub Releases
+- generates a Sparkle appcast
+- uploads a zip archive, sha256 checksum, and appcast to GitHub Releases
 
 Required GitHub secrets:
 
@@ -84,6 +115,8 @@ Required GitHub secrets:
 - `APPLE_API_PRIVATE_KEY`
 - `APPLE_API_KEY_ID`
 - `APPLE_API_ISSUER_ID`
+- `SPARKLE_PUBLIC_ED_KEY`
+- `SPARKLE_PRIVATE_KEY`
 
 ## Permissions
 

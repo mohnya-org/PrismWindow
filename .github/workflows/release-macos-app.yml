@@ -24,6 +24,7 @@ jobs:
       zip_name: ${{ steps.metadata.outputs.zip_name }}
       zip_path: ${{ steps.metadata.outputs.zip_path }}
       checksum_path: ${{ steps.metadata.outputs.checksum_path }}
+      appcast_path: ${{ steps.metadata.outputs.appcast_path }}
       should_release: ${{ steps.tag.outputs.should_release }}
       skip_reason: ${{ steps.tag.outputs.skip_reason }}
 
@@ -56,6 +57,7 @@ jobs:
             echo "zip_name=Prism Window-$VERSION-macOS.zip"
             echo "zip_path=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip"
             echo "checksum_path=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip.sha256"
+            echo "appcast_path=$GITHUB_WORKSPACE/dist/appcast.xml"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create release tag if missing
@@ -147,10 +149,12 @@ jobs:
       - name: Build app bundle
         env:
           VERSION: ${{ needs.prepare-release.outputs.version }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
+          [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]] || { echo "SPARKLE_PUBLIC_ED_KEY is required" >&2; exit 1; }
           mkdir -p dist
-          VERSION="$VERSION" BUILD_NUMBER="${GITHUB_RUN_NUMBER}" CODESIGN_IDENTITY="-" ./scripts/build-app.sh
+          VERSION="$VERSION" BUILD_NUMBER="${GITHUB_RUN_NUMBER}" SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" CODESIGN_IDENTITY="-" ./scripts/build-app.sh
           rm -rf "dist/Prism Window.app"
           cp -R ".build/release/Prism Window.app" "dist/Prism Window.app"
 
@@ -213,18 +217,35 @@ jobs:
           ditto -c -k --keepParent "dist/Prism Window.app" "$ZIP_PATH"
           shasum -a 256 "$ZIP_PATH" > "$CHECKSUM_PATH"
 
+      - name: Generate Sparkle appcast
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
+          OUTPUT_PATH: ${{ needs.prepare-release.outputs.appcast_path }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$SPARKLE_PRIVATE_KEY" ]] || { echo "SPARKLE_PRIVATE_KEY is required" >&2; exit 1; }
+          PRIVATE_KEY_PATH="$RUNNER_TEMP/sparkle_private_key"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+          chmod 600 "$PRIVATE_KEY_PATH"
+          SPARKLE_PRIVATE_KEY_PATH="$PRIVATE_KEY_PATH" ./scripts/generate-appcast.sh
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
           ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
           CHECKSUM_PATH: ${{ needs.prepare-release.outputs.checksum_path }}
+          APPCAST_PATH: ${{ needs.prepare-release.outputs.appcast_path }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" --clobber
+            gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" "$APPCAST_PATH" --clobber
           else
-            gh release create "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" \
+            gh release create "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" "$APPCAST_PATH" \
               --title "$TAG" \
               --generate-notes
           fi
