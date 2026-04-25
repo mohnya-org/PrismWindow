@@ -186,13 +186,6 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
 
-            Button {
-                checkForUpdates()
-            } label: {
-                Label("Check for Updates…", systemImage: "arrow.triangle.2.circlepath")
-            }
-            .controlSize(.small)
-
             if !appState.currentLayoutRules.isEmpty {
                 Toggle(isOn: $appState.autoApplyRules) {
                     Label("Auto-apply rules on focus", systemImage: "bolt.fill")
@@ -222,10 +215,6 @@ struct SettingsView: View {
                 }
             }
         )
-    }
-
-    private func checkForUpdates() {
-        (NSApp.delegate as? AppDelegate)?.checkForUpdates(nil)
     }
 
     private var overviewDisplaysCard: some View {

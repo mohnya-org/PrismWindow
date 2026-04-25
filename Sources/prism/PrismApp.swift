@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import Sparkle
 
 @main
 struct PrismApp: App {
@@ -26,35 +25,8 @@ struct PrismApp: App {
     }
 }
 
-@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var updaterController: SPUStandardUpdaterController?
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-
-        if Bundle.main.sparkleUpdatesAreConfigured {
-            updaterController = SPUStandardUpdaterController(
-                startingUpdater: true,
-                updaterDelegate: nil,
-                userDriverDelegate: nil
-            )
-        }
-    }
-
-    @objc func checkForUpdates(_ sender: Any?) {
-        updaterController?.checkForUpdates(sender)
-    }
-}
-
-private extension Bundle {
-    var sparkleUpdatesAreConfigured: Bool {
-        guard let feedURL = object(forInfoDictionaryKey: "SUFeedURL") as? String,
-              let publicKey = object(forInfoDictionaryKey: "SUPublicEDKey") as? String else {
-            return false
-        }
-
-        return !feedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            !publicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

@@ -24,7 +24,6 @@ jobs:
       zip_name: ${{ steps.metadata.outputs.zip_name }}
       zip_path: ${{ steps.metadata.outputs.zip_path }}
       checksum_path: ${{ steps.metadata.outputs.checksum_path }}
-      appcast_path: ${{ steps.metadata.outputs.appcast_path }}
       should_release: ${{ steps.tag.outputs.should_release }}
       skip_reason: ${{ steps.tag.outputs.skip_reason }}
 
@@ -57,7 +56,6 @@ jobs:
             echo "zip_name=Prism Window-$VERSION-macOS.zip"
             echo "zip_path=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip"
             echo "checksum_path=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip.sha256"
-            echo "appcast_path=$GITHUB_WORKSPACE/dist/appcast.xml"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create release tag if missing
@@ -110,12 +108,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Report Xcode
-        run: |
-          set -euo pipefail
-          xcodebuild -version
-          xcrun --show-sdk-path
-
       - name: Import Developer ID certificate
         env:
           APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
@@ -147,17 +139,7 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
           security default-keychain -s "$KEYCHAIN_PATH"
 
-          APPLE_ROOT_CA="$RUNNER_TEMP/AppleRootCA.cer"
-          DEVELOPER_ID_G1="$RUNNER_TEMP/DeveloperIDCA.cer"
-          DEVELOPER_ID_G2="$RUNNER_TEMP/DeveloperIDG2CA.cer"
-          /usr/bin/curl -fsSL https://www.apple.com/appleca/AppleIncRootCertificate.cer -o "$APPLE_ROOT_CA"
-          /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDCA.cer -o "$DEVELOPER_ID_G1"
-          /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$DEVELOPER_ID_G2"
-          security import "$APPLE_ROOT_CA" -k "$KEYCHAIN_PATH"
-          security import "$DEVELOPER_ID_G1" -k "$KEYCHAIN_PATH"
-          security import "$DEVELOPER_ID_G2" -k "$KEYCHAIN_PATH"
-
-          SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/Developer ID Application/ {print $2; exit}')"
+          SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/ {print $2; exit}')"
           [[ -n "$SIGNING_IDENTITY" ]] || { echo "Developer ID Application identity not found" >&2; exit 1; }
 
           echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
@@ -165,12 +147,10 @@ jobs:
       - name: Build app bundle
         env:
           VERSION: ${{ needs.prepare-release.outputs.version }}
-          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
-          [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]] || { echo "SPARKLE_PUBLIC_ED_KEY is required" >&2; exit 1; }
           mkdir -p dist
-          VERSION="$VERSION" BUILD_NUMBER="${GITHUB_RUN_NUMBER}" SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" SKIP_CODESIGN=true ./scripts/build-app.sh
+          VERSION="$VERSION" BUILD_NUMBER="${GITHUB_RUN_NUMBER}" CODESIGN_IDENTITY="-" ./scripts/build-app.sh
           rm -rf "dist/Prism Window.app"
           cp -R ".build/release/Prism Window.app" "dist/Prism Window.app"
 
@@ -185,16 +165,8 @@ jobs:
       - name: Sign app bundle
         run: |
           set -euo pipefail
-          APP_PATH="dist/Prism Window.app" SIGNING_IDENTITY="$SIGNING_IDENTITY" ./scripts/sign-release-app.sh
-          CERT_VERIFY_DIR="$RUNNER_TEMP/prism-window-signing-certs"
-          rm -rf "$CERT_VERIFY_DIR"
-          mkdir -p "$CERT_VERIFY_DIR"
-          codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "dist/Prism Window.app"
-          test -s "$CERT_VERIFY_DIR/cert-0"
-          SIGN_DETAILS="$(codesign -dv --verbose=4 "dist/Prism Window.app" 2>&1)"
-          printf '%s\n' "$SIGN_DETAILS"
-          printf '%s\n' "$SIGN_DETAILS" | grep -q "Authority=Developer ID Application:"
-          ! printf '%s\n' "$SIGN_DETAILS" | grep -q "Authority=(unavailable)"
+          codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "dist/Prism Window.app"
+          codesign --verify --deep --strict --verbose=2 "dist/Prism Window.app"
 
       - name: Prepare App Store Connect API key
         env:
@@ -217,15 +189,12 @@ jobs:
       - name: Notarize app archive
         env:
           ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          [[ -n "$APPLE_TEAM_ID" ]] || { echo "APPLE_TEAM_ID is required" >&2; exit 1; }
           xcrun notarytool submit "$ZIP_PATH" \
             --key "$APPLE_API_KEY_PATH" \
             --key-id "${{ secrets.APPLE_API_KEY_ID }}" \
             --issuer "${{ secrets.APPLE_API_ISSUER_ID }}" \
-            --team-id "$APPLE_TEAM_ID" \
             --wait
 
       - name: Staple notarization ticket
@@ -233,7 +202,6 @@ jobs:
           set -euo pipefail
           xcrun stapler staple "dist/Prism Window.app"
           xcrun stapler validate "dist/Prism Window.app"
-          spctl --assess --type execute --verbose=4 "dist/Prism Window.app"
 
       - name: Recreate release archive and checksum
         env:
@@ -245,60 +213,18 @@ jobs:
           ditto -c -k --keepParent "dist/Prism Window.app" "$ZIP_PATH"
           shasum -a 256 "$ZIP_PATH" > "$CHECKSUM_PATH"
 
-      - name: Verify final release archive
-        env:
-          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
-        run: |
-          set -euo pipefail
-          VERIFY_DIR="$RUNNER_TEMP/prism-window-release-verify"
-          CERT_VERIFY_DIR="$RUNNER_TEMP/prism-window-release-certs"
-          rm -rf "$VERIFY_DIR"
-          rm -rf "$CERT_VERIFY_DIR"
-          mkdir -p "$VERIFY_DIR"
-          mkdir -p "$CERT_VERIFY_DIR"
-          ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
-          CLEAN_KEYCHAIN_PATH="$RUNNER_TEMP/verify-clean.keychain-db"
-          security create-keychain -p verify "$CLEAN_KEYCHAIN_PATH"
-          security list-keychains -d user -s "$CLEAN_KEYCHAIN_PATH"
-          codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/Prism Window.app"
-          codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "$VERIFY_DIR/Prism Window.app"
-          test -s "$CERT_VERIFY_DIR/cert-0"
-          SIGN_DETAILS="$(codesign -dv --verbose=4 "$VERIFY_DIR/Prism Window.app" 2>&1)"
-          printf '%s\n' "$SIGN_DETAILS"
-          printf '%s\n' "$SIGN_DETAILS" | grep -q "Authority=Developer ID Application:"
-          ! printf '%s\n' "$SIGN_DETAILS" | grep -q "Authority=(unavailable)"
-          xcrun stapler validate "$VERIFY_DIR/Prism Window.app"
-          spctl --assess --type execute --verbose=4 "$VERIFY_DIR/Prism Window.app"
-
-      - name: Generate Sparkle appcast
-        env:
-          VERSION: ${{ needs.prepare-release.outputs.version }}
-          BUILD_NUMBER: ${{ github.run_number }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
-          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
-          OUTPUT_PATH: ${{ needs.prepare-release.outputs.appcast_path }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          [[ -n "$SPARKLE_PRIVATE_KEY" ]] || { echo "SPARKLE_PRIVATE_KEY is required" >&2; exit 1; }
-          PRIVATE_KEY_PATH="$RUNNER_TEMP/sparkle_private_key"
-          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
-          chmod 600 "$PRIVATE_KEY_PATH"
-          SPARKLE_PRIVATE_KEY_PATH="$PRIVATE_KEY_PATH" ./scripts/generate-appcast.sh
-
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare-release.outputs.tag }}
           ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
           CHECKSUM_PATH: ${{ needs.prepare-release.outputs.checksum_path }}
-          APPCAST_PATH: ${{ needs.prepare-release.outputs.appcast_path }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" "$APPCAST_PATH" --clobber
+            gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" --clobber
           else
-            gh release create "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" "$APPCAST_PATH" \
+            gh release create "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" \
               --title "$TAG" \
               --generate-notes
           fi
@@ -314,8 +240,4 @@ jobs:
             security delete-keychain "$KEYCHAIN_PATH" || true
           fi
 
-          if [[ -n "${CLEAN_KEYCHAIN_PATH:-}" ]]; then
-            security delete-keychain "$CLEAN_KEYCHAIN_PATH" || true
-          fi
-
-          rm -f "${CERT_PATH:-}" "${CERT_BASE64_PATH:-}" "${APPLE_API_KEY_PATH:-}" "${APPLE_ROOT_CA:-}" "${DEVELOPER_ID_G1:-}" "${DEVELOPER_ID_G2:-}"
+          rm -f "${CERT_PATH:-}" "${CERT_BASE64_PATH:-}" "${APPLE_API_KEY_PATH:-}"
