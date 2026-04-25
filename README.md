@@ -58,7 +58,7 @@ Resources/Info.plist
 Current app version:
 
 ```bash
-1.1.1
+1.2.0
 ```
 
 ## Updates
@@ -115,6 +115,7 @@ Required GitHub secrets:
 - `APPLE_API_PRIVATE_KEY`
 - `APPLE_API_KEY_ID`
 - `APPLE_API_ISSUER_ID`
+- `APPLE_TEAM_ID`
 - `SPARKLE_PUBLIC_ED_KEY`
 - `SPARKLE_PRIVATE_KEY`
 
