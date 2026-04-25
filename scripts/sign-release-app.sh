@@ -9,7 +9,7 @@ SPARKLE_VERSION_DIR="$SPARKLE_FRAMEWORK/Versions/B"
 
 sign() {
   local path="$1"
-  codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$path"
+  /usr/bin/codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$path"
 }
 
 if [[ ! -d "$APP_PATH" ]]; then
@@ -27,4 +27,4 @@ fi
 
 sign "$APP_PATH"
 
-codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+/usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
