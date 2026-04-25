@@ -193,12 +193,15 @@ jobs:
       - name: Notarize app archive
         env:
           ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+          [[ -n "$APPLE_TEAM_ID" ]] || { echo "APPLE_TEAM_ID is required" >&2; exit 1; }
           xcrun notarytool submit "$ZIP_PATH" \
             --key "$APPLE_API_KEY_PATH" \
             --key-id "${{ secrets.APPLE_API_KEY_ID }}" \
             --issuer "${{ secrets.APPLE_API_ISSUER_ID }}" \
+            --team-id "$APPLE_TEAM_ID" \
             --wait
 
       - name: Staple notarization ticket
@@ -206,6 +209,7 @@ jobs:
           set -euo pipefail
           xcrun stapler staple "dist/Prism Window.app"
           xcrun stapler validate "dist/Prism Window.app"
+          spctl --assess --type execute --verbose=4 "dist/Prism Window.app"
 
       - name: Recreate release archive and checksum
         env:
