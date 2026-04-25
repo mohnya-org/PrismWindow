@@ -124,12 +124,25 @@ struct WindowMover {
         case .fullscreen:
             true
         }
+        let shouldHideTransition = shouldEndFullScreen && shouldEnterFullScreen
+        var shouldRestoreHiddenApp = false
+        defer {
+            if shouldRestoreHiddenApp {
+                app?.unhide()
+                app?.activate()
+            }
+        }
 
         if shouldEndFullScreen {
-            // Hide the app and wait until macOS confirms it is hidden, so that
-            // the fullscreen-exit space transition plays over an empty window.
-            app?.hide()
-            if let app {
+            if shouldHideTransition {
+                // Hide only when the window will return to fullscreen. If the
+                // final state is windowed, hiding can leave macOS showing the
+                // old fullscreen snapshot on the source display.
+                app?.hide()
+                shouldRestoreHiddenApp = true
+            }
+
+            if let app, shouldHideTransition {
                 for _ in 0..<20 {
                     if app.isHidden { break }
                     try await Task.sleep(for: .milliseconds(10))
@@ -145,16 +158,17 @@ struct WindowMover {
             // display's framebuffer after the space transition completes.
             try await Task.sleep(for: .milliseconds(200))
 
-            // Push the window just outside the source display's
-            // visible area. This clears any stale snapshot / residual image
-            // that macOS leaves behind after the fullscreen-exit animation.
-            let hidePoint = CGPoint(
-                x: sourceDisplay.frame.maxX + 100,
-                y: sourceDisplay.frame.maxY + 100
-            )
-            try window.setValue(pointValue(hidePoint), for: kAXPositionAttribute as CFString)
-            let tinySize = CGSize(width: 1, height: 1)
-            try window.setValue(sizeValue(tinySize), for: kAXSizeAttribute as CFString)
+            if shouldHideTransition {
+                // While hidden, move the window out of the source display
+                // before resizing it on the target display.
+                let hidePoint = CGPoint(
+                    x: sourceDisplay.frame.maxX + 100,
+                    y: sourceDisplay.frame.maxY + 100
+                )
+                try window.setValue(pointValue(hidePoint), for: kAXPositionAttribute as CFString)
+                let tinySize = CGSize(width: 1, height: 1)
+                try window.setValue(sizeValue(tinySize), for: kAXSizeAttribute as CFString)
+            }
         }
 
         let targetRect = targetDisplay.visibleFrame.insetBy(dx: 20, dy: 20)
@@ -169,6 +183,7 @@ struct WindowMover {
             try await waitForSpaceChange()
             app?.unhide()
             app?.activate()
+            shouldRestoreHiddenApp = false
             return MoveResult(message: "Moved window to \(targetDisplay.name) in fullscreen.")
         }
 
