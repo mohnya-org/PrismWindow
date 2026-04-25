@@ -220,6 +220,19 @@ jobs:
           ditto -c -k --keepParent "dist/Prism Window.app" "$ZIP_PATH"
           shasum -a 256 "$ZIP_PATH" > "$CHECKSUM_PATH"
 
+      - name: Verify final release archive
+        env:
+          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
+        run: |
+          set -euo pipefail
+          VERIFY_DIR="$RUNNER_TEMP/prism-window-release-verify"
+          rm -rf "$VERIFY_DIR"
+          mkdir -p "$VERIFY_DIR"
+          ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
+          codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/Prism Window.app"
+          xcrun stapler validate "$VERIFY_DIR/Prism Window.app"
+          spctl --assess --type execute --verbose=4 "$VERIFY_DIR/Prism Window.app"
+
       - name: Generate Sparkle appcast
         env:
           VERSION: ${{ needs.prepare-release.outputs.version }}
