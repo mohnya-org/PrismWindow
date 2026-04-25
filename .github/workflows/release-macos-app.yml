@@ -141,7 +141,14 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
           security default-keychain -s "$KEYCHAIN_PATH"
 
-          SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/ {print $2; exit}')"
+          DEVELOPER_ID_G1="$RUNNER_TEMP/DeveloperIDCA.cer"
+          DEVELOPER_ID_G2="$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDCA.cer -o "$DEVELOPER_ID_G1"
+          /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$DEVELOPER_ID_G2"
+          security import "$DEVELOPER_ID_G1" -k "$KEYCHAIN_PATH"
+          security import "$DEVELOPER_ID_G2" -k "$KEYCHAIN_PATH"
+
+          SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/Developer ID Application/ {print $2; exit}')"
           [[ -n "$SIGNING_IDENTITY" ]] || { echo "Developer ID Application identity not found" >&2; exit 1; }
 
           echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
@@ -169,7 +176,7 @@ jobs:
       - name: Sign app bundle
         run: |
           set -euo pipefail
-          APP_PATH="dist/Prism Window.app" SIGNING_IDENTITY="$SIGNING_IDENTITY" ./scripts/sign-release-app.sh
+          APP_PATH="dist/Prism Window.app" SIGNING_IDENTITY="$SIGNING_IDENTITY" KEYCHAIN_PATH="$KEYCHAIN_PATH" ./scripts/sign-release-app.sh
 
       - name: Prepare App Store Connect API key
         env:
@@ -230,6 +237,8 @@ jobs:
           mkdir -p "$VERIFY_DIR"
           ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
           codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/Prism Window.app"
+          codesign -d --extract-certificates "$RUNNER_TEMP/prism-window-cert-" "$VERIFY_DIR/Prism Window.app"
+          ls "$RUNNER_TEMP"/prism-window-cert-* >/dev/null
           xcrun stapler validate "$VERIFY_DIR/Prism Window.app"
           spctl --assess --type execute --verbose=4 "$VERIFY_DIR/Prism Window.app"
 
@@ -277,4 +286,4 @@ jobs:
             security delete-keychain "$KEYCHAIN_PATH" || true
           fi
 
-          rm -f "${CERT_PATH:-}" "${CERT_BASE64_PATH:-}" "${APPLE_API_KEY_PATH:-}"
+          rm -f "${CERT_PATH:-}" "${CERT_BASE64_PATH:-}" "${APPLE_API_KEY_PATH:-}" "${DEVELOPER_ID_G1:-}" "${DEVELOPER_ID_G2:-}"
