@@ -7,6 +7,7 @@ RELEASE_DIR="$BUILD_DIR/release"
 APP_DIR="$RELEASE_DIR/Prism Window.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
+FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 ICONSET_DIR="$BUILD_DIR/AppIcon.iconset"
 ICON_FILE="$RESOURCES_DIR/AppIcon.icns"
@@ -16,6 +17,8 @@ PLIST_PATH="$CONTENTS_DIR/Info.plist"
 VERSION="${VERSION:-}"
 BUILD_NUMBER="${BUILD_NUMBER:-}"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-}"
 
 if [[ ! -f "$SOURCE_ICON" ]]; then
   echo "Missing source icon: $SOURCE_ICON" >&2
@@ -30,7 +33,7 @@ fi
 swift build -c release
 
 rm -rf "$APP_DIR" "$ICONSET_DIR"
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$ICONSET_DIR"
+mkdir -p "$MACOS_DIR" "$FRAMEWORKS_DIR" "$RESOURCES_DIR" "$ICONSET_DIR"
 
 create_icon() {
   local size="$1"
@@ -55,12 +58,38 @@ cp "$RELEASE_DIR/PrismWindow" "$MACOS_DIR/PrismWindow"
 cp "$PLIST_TEMPLATE" "$PLIST_PATH"
 chmod +x "$MACOS_DIR/PrismWindow"
 
+SPARKLE_FRAMEWORK="$(find "$BUILD_DIR" -path "*/Sparkle.framework" -type d | head -n 1)"
+if [[ -z "$SPARKLE_FRAMEWORK" ]]; then
+  echo "Missing Sparkle.framework in SwiftPM build artifacts" >&2
+  exit 1
+fi
+cp -R "$SPARKLE_FRAMEWORK" "$FRAMEWORKS_DIR/Sparkle.framework"
+
+set_plist_string() {
+  local key="$1"
+  local value="$2"
+
+  if /usr/libexec/PlistBuddy -c "Print :$key" "$PLIST_PATH" >/dev/null 2>&1; then
+    /usr/libexec/PlistBuddy -c "Set :$key $value" "$PLIST_PATH"
+  else
+    /usr/libexec/PlistBuddy -c "Add :$key string $value" "$PLIST_PATH"
+  fi
+}
+
 if [[ -n "$VERSION" ]]; then
-  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST_PATH"
+  set_plist_string "CFBundleShortVersionString" "$VERSION"
 fi
 
 if [[ -n "$BUILD_NUMBER" ]]; then
-  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST_PATH"
+  set_plist_string "CFBundleVersion" "$BUILD_NUMBER"
+fi
+
+if [[ -n "$SPARKLE_FEED_URL" ]]; then
+  set_plist_string "SUFeedURL" "$SPARKLE_FEED_URL"
+fi
+
+if [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
+  set_plist_string "SUPublicEDKey" "$SPARKLE_PUBLIC_ED_KEY"
 fi
 
 codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP_DIR" >/dev/null
