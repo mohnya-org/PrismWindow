@@ -17,6 +17,7 @@ PLIST_PATH="$CONTENTS_DIR/Info.plist"
 VERSION="${VERSION:-}"
 BUILD_NUMBER="${BUILD_NUMBER:-}"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+SKIP_CODESIGN="${SKIP_CODESIGN:-false}"
 SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
 SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-}"
 
@@ -92,6 +93,8 @@ if [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
   set_plist_string "SUPublicEDKey" "$SPARKLE_PUBLIC_ED_KEY"
 fi
 
-codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP_DIR" >/dev/null
+if [[ "$SKIP_CODESIGN" != "true" ]]; then
+  codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP_DIR" >/dev/null
+fi
 
 echo "Built app bundle: $APP_DIR"

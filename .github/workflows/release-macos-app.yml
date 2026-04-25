@@ -164,7 +164,7 @@ jobs:
           set -euo pipefail
           [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]] || { echo "SPARKLE_PUBLIC_ED_KEY is required" >&2; exit 1; }
           mkdir -p dist
-          VERSION="$VERSION" BUILD_NUMBER="${GITHUB_RUN_NUMBER}" SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" CODESIGN_IDENTITY="-" ./scripts/build-app.sh
+          VERSION="$VERSION" BUILD_NUMBER="${GITHUB_RUN_NUMBER}" SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" SKIP_CODESIGN=true ./scripts/build-app.sh
           rm -rf "dist/Prism Window.app"
           cp -R ".build/release/Prism Window.app" "dist/Prism Window.app"
 
@@ -250,6 +250,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/Prism Window.app"
           codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "$VERIFY_DIR/Prism Window.app"
           test -s "$CERT_VERIFY_DIR/cert-0"
+          ! grep -q "Authority=(unavailable)" <(codesign -dv --verbose=4 "$VERIFY_DIR/Prism Window.app" 2>&1)
           xcrun stapler validate "$VERIFY_DIR/Prism Window.app"
           spctl --assess --type execute --verbose=4 "$VERIFY_DIR/Prism Window.app"
 
