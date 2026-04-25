@@ -174,8 +174,11 @@ struct WindowMover {
         let targetRect = targetDisplay.visibleFrame.insetBy(dx: 20, dy: 20)
         try window.setValue(pointValue(targetRect.origin), for: kAXPositionAttribute as CFString)
         try window.setValue(sizeValue(targetRect.size), for: kAXSizeAttribute as CFString)
+        try await waitForWindowFrame(of: window, toMatch: targetRect)
 
         if shouldEnterFullScreen {
+            app?.activate()
+            try await Task.sleep(for: .milliseconds(150))
             try window.setValue(kCFBooleanTrue, for: fullScreenAttribute())
             try await waitForFullScreenState(of: window, expected: true)
             // Wait for the fullscreen-enter animation to complete before
@@ -253,6 +256,23 @@ struct WindowMover {
         // Timed out — proceed anyway; the move may still succeed.
     }
 
+    private func waitForWindowFrame(of window: AXUIElement, toMatch expectedFrame: CGRect) async throws {
+        for _ in 0..<30 {
+            let pos = cgPoint(from: window.optionalValue(for: kAXPositionAttribute as CFString))
+            let size = cgSize(from: window.optionalValue(for: kAXSizeAttribute as CFString))
+            if let pos, let size {
+                let current = CGRect(origin: pos, size: size)
+                if current.isApproximatelyEqual(to: expectedFrame, tolerance: 3) {
+                    // Give WindowServer a short moment to present the new
+                    // frame before using it as the basis for fullscreen.
+                    try await Task.sleep(for: .milliseconds(120))
+                    return
+                }
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     private func fullScreenAttribute() -> CFString {
         "AXFullScreen" as CFString
     }
@@ -273,5 +293,12 @@ private extension CGRect {
     var area: CGFloat {
         guard !isNull, !isEmpty else { return 0 }
         return width * height
+    }
+
+    func isApproximatelyEqual(to other: CGRect, tolerance: CGFloat) -> Bool {
+        abs(origin.x - other.origin.x) <= tolerance &&
+            abs(origin.y - other.origin.y) <= tolerance &&
+            abs(size.width - other.size.width) <= tolerance &&
+            abs(size.height - other.size.height) <= tolerance
     }
 }
