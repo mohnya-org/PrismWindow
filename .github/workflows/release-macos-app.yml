@@ -237,7 +237,7 @@ jobs:
           mkdir -p "$VERIFY_DIR"
           ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
           codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/Prism Window.app"
-          codesign -d --extract-certificates "$RUNNER_TEMP/prism-window-cert-" "$VERIFY_DIR/Prism Window.app"
+          codesign -d --extract-certificates="$RUNNER_TEMP/prism-window-cert-" "$VERIFY_DIR/Prism Window.app"
           ls "$RUNNER_TEMP"/prism-window-cert-* >/dev/null
           xcrun stapler validate "$VERIFY_DIR/Prism Window.app"
           spctl --assess --type execute --verbose=4 "$VERIFY_DIR/Prism Window.app"
