@@ -144,7 +144,7 @@ jobs:
           APPLE_ROOT_CA="$RUNNER_TEMP/AppleRootCA.cer"
           DEVELOPER_ID_G1="$RUNNER_TEMP/DeveloperIDCA.cer"
           DEVELOPER_ID_G2="$RUNNER_TEMP/DeveloperIDG2CA.cer"
-          /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/AppleRootCA.cer -o "$APPLE_ROOT_CA"
+          /usr/bin/curl -fsSL https://www.apple.com/appleca/AppleIncRootCertificate.cer -o "$APPLE_ROOT_CA"
           /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDCA.cer -o "$DEVELOPER_ID_G1"
           /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$DEVELOPER_ID_G2"
           security import "$APPLE_ROOT_CA" -k "$KEYCHAIN_PATH"
