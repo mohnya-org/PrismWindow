@@ -110,6 +110,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
+      - name: Report Xcode
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --show-sdk-path
+
       - name: Import Developer ID certificate
         env:
           APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}

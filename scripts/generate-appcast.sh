@@ -49,7 +49,7 @@ cat > "$OUTPUT_PATH" <<EOF
       <pubDate>$PUB_DATE</pubDate>
       <sparkle:version>$BUILD_NUMBER</sparkle:version>
       <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
       <enclosure
         url="$DOWNLOAD_URL"
         length="$LENGTH"

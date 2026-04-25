@@ -58,7 +58,7 @@ Resources/Info.plist
 Current app version:
 
 ```bash
-1.2.10
+1.2.11
 ```
 
 ## Updates
@@ -91,6 +91,10 @@ SPARKLE_PRIVATE_KEY
 Do not commit the private key. Release builds inject the public key into the
 app bundle and use the private key to sign the update archive in `appcast.xml`.
 
+## Compatibility
+
+Prism Window requires macOS 26.0 or later.
+
 ## Release CI
 
 GitHub Actions workflow:
@@ -107,6 +111,9 @@ The workflow:
 - signs and notarizes the app
 - generates a Sparkle appcast
 - uploads a zip archive, sha256 checksum, and appcast to GitHub Releases
+
+The release workflow runs on the self-hosted macOS runner and uses the
+currently selected Xcode on that machine.
 
 Required GitHub secrets:
 
