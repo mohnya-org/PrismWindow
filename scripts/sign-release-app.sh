@@ -6,6 +6,7 @@ SIGNING_IDENTITY="${SIGNING_IDENTITY:?SIGNING_IDENTITY is required}"
 
 SPARKLE_FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
 SPARKLE_VERSION_DIR="$SPARKLE_FRAMEWORK/Versions/B"
+APP_EXECUTABLE="$APP_PATH/Contents/MacOS/PrismWindow"
 
 sign() {
   local path="$1"
@@ -39,6 +40,8 @@ if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
   sign "$SPARKLE_FRAMEWORK"
 fi
 
+remove_signature "$APP_EXECUTABLE"
+sign "$APP_EXECUTABLE"
 remove_signature "$APP_PATH"
 sign "$APP_PATH"
 
