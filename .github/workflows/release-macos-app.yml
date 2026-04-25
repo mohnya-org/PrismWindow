@@ -179,12 +179,13 @@ jobs:
       - name: Sign app bundle
         run: |
           set -euo pipefail
-          APP_PATH="dist/Prism Window.app" SIGNING_IDENTITY="$SIGNING_IDENTITY" KEYCHAIN_PATH="$KEYCHAIN_PATH" ./scripts/sign-release-app.sh
+          APP_PATH="dist/Prism Window.app" SIGNING_IDENTITY="$SIGNING_IDENTITY" ./scripts/sign-release-app.sh
           CERT_VERIFY_DIR="$RUNNER_TEMP/prism-window-signing-certs"
           rm -rf "$CERT_VERIFY_DIR"
           mkdir -p "$CERT_VERIFY_DIR"
           codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "dist/Prism Window.app"
           test -s "$CERT_VERIFY_DIR/cert-0"
+          codesign -dv --verbose=4 "dist/Prism Window.app" 2>&1 | grep -q "Authority=Developer ID Application:"
 
       - name: Prepare App Store Connect API key
         env:
@@ -247,10 +248,13 @@ jobs:
           mkdir -p "$VERIFY_DIR"
           mkdir -p "$CERT_VERIFY_DIR"
           ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
+          CLEAN_KEYCHAIN_PATH="$RUNNER_TEMP/verify-clean.keychain-db"
+          security create-keychain -p verify "$CLEAN_KEYCHAIN_PATH"
+          security list-keychains -d user -s "$CLEAN_KEYCHAIN_PATH"
           codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/Prism Window.app"
           codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "$VERIFY_DIR/Prism Window.app"
           test -s "$CERT_VERIFY_DIR/cert-0"
-          ! grep -q "Authority=(unavailable)" <(codesign -dv --verbose=4 "$VERIFY_DIR/Prism Window.app" 2>&1)
+          codesign -dv --verbose=4 "$VERIFY_DIR/Prism Window.app" 2>&1 | grep -q "Authority=Developer ID Application:"
           xcrun stapler validate "$VERIFY_DIR/Prism Window.app"
           spctl --assess --type execute --verbose=4 "$VERIFY_DIR/Prism Window.app"
 
@@ -296,6 +300,10 @@ jobs:
             security default-keychain -s login.keychain-db || true
             security list-keychains -d user -s login.keychain-db || true
             security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+
+          if [[ -n "${CLEAN_KEYCHAIN_PATH:-}" ]]; then
+            security delete-keychain "$CLEAN_KEYCHAIN_PATH" || true
           fi
 
           rm -f "${CERT_PATH:-}" "${CERT_BASE64_PATH:-}" "${APPLE_API_KEY_PATH:-}" "${APPLE_ROOT_CA:-}" "${DEVELOPER_ID_G1:-}" "${DEVELOPER_ID_G2:-}"

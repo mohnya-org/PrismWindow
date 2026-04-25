@@ -3,7 +3,6 @@ set -euo pipefail
 
 APP_PATH="${APP_PATH:?APP_PATH is required}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:?SIGNING_IDENTITY is required}"
-KEYCHAIN_PATH="${KEYCHAIN_PATH:-}"
 
 SPARKLE_FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
 SPARKLE_VERSION_DIR="$SPARKLE_FRAMEWORK/Versions/B"
@@ -11,9 +10,6 @@ SPARKLE_VERSION_DIR="$SPARKLE_FRAMEWORK/Versions/B"
 sign() {
   local path="$1"
   local args=(--force --options runtime --timestamp --sign "$SIGNING_IDENTITY")
-  if [[ -n "$KEYCHAIN_PATH" ]]; then
-    args+=(--keychain "$KEYCHAIN_PATH")
-  fi
   /usr/bin/codesign "${args[@]}" "$path"
 }
 
