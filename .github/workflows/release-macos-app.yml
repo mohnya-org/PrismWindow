@@ -185,7 +185,10 @@ jobs:
           mkdir -p "$CERT_VERIFY_DIR"
           codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "dist/Prism Window.app"
           test -s "$CERT_VERIFY_DIR/cert-0"
-          codesign -dv --verbose=4 "dist/Prism Window.app" 2>&1 | grep -q "Authority=Developer ID Application:"
+          SIGN_DETAILS="$(codesign -dv --verbose=4 "dist/Prism Window.app" 2>&1)"
+          printf '%s\n' "$SIGN_DETAILS"
+          printf '%s\n' "$SIGN_DETAILS" | grep -q "Authority=Developer ID Application:"
+          ! printf '%s\n' "$SIGN_DETAILS" | grep -q "Authority=(unavailable)"
 
       - name: Prepare App Store Connect API key
         env:
@@ -254,7 +257,10 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/Prism Window.app"
           codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "$VERIFY_DIR/Prism Window.app"
           test -s "$CERT_VERIFY_DIR/cert-0"
-          codesign -dv --verbose=4 "$VERIFY_DIR/Prism Window.app" 2>&1 | grep -q "Authority=Developer ID Application:"
+          SIGN_DETAILS="$(codesign -dv --verbose=4 "$VERIFY_DIR/Prism Window.app" 2>&1)"
+          printf '%s\n' "$SIGN_DETAILS"
+          printf '%s\n' "$SIGN_DETAILS" | grep -q "Authority=Developer ID Application:"
+          ! printf '%s\n' "$SIGN_DETAILS" | grep -q "Authority=(unavailable)"
           xcrun stapler validate "$VERIFY_DIR/Prism Window.app"
           spctl --assess --type execute --verbose=4 "$VERIFY_DIR/Prism Window.app"
 
