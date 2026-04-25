@@ -141,10 +141,13 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
           security default-keychain -s "$KEYCHAIN_PATH"
 
+          APPLE_ROOT_CA="$RUNNER_TEMP/AppleRootCA.cer"
           DEVELOPER_ID_G1="$RUNNER_TEMP/DeveloperIDCA.cer"
           DEVELOPER_ID_G2="$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/AppleRootCA.cer -o "$APPLE_ROOT_CA"
           /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDCA.cer -o "$DEVELOPER_ID_G1"
           /usr/bin/curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$DEVELOPER_ID_G2"
+          security import "$APPLE_ROOT_CA" -k "$KEYCHAIN_PATH"
           security import "$DEVELOPER_ID_G1" -k "$KEYCHAIN_PATH"
           security import "$DEVELOPER_ID_G2" -k "$KEYCHAIN_PATH"
 
@@ -177,6 +180,11 @@ jobs:
         run: |
           set -euo pipefail
           APP_PATH="dist/Prism Window.app" SIGNING_IDENTITY="$SIGNING_IDENTITY" KEYCHAIN_PATH="$KEYCHAIN_PATH" ./scripts/sign-release-app.sh
+          CERT_VERIFY_DIR="$RUNNER_TEMP/prism-window-signing-certs"
+          rm -rf "$CERT_VERIFY_DIR"
+          mkdir -p "$CERT_VERIFY_DIR"
+          codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "dist/Prism Window.app"
+          test -s "$CERT_VERIFY_DIR/cert-0"
 
       - name: Prepare App Store Connect API key
         env:
@@ -233,12 +241,15 @@ jobs:
         run: |
           set -euo pipefail
           VERIFY_DIR="$RUNNER_TEMP/prism-window-release-verify"
+          CERT_VERIFY_DIR="$RUNNER_TEMP/prism-window-release-certs"
           rm -rf "$VERIFY_DIR"
+          rm -rf "$CERT_VERIFY_DIR"
           mkdir -p "$VERIFY_DIR"
+          mkdir -p "$CERT_VERIFY_DIR"
           ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
           codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/Prism Window.app"
-          codesign -d --extract-certificates="$RUNNER_TEMP/prism-window-cert-" "$VERIFY_DIR/Prism Window.app"
-          ls "$RUNNER_TEMP"/prism-window-cert-* >/dev/null
+          codesign -d --verbose=4 --extract-certificates="$CERT_VERIFY_DIR/cert-" "$VERIFY_DIR/Prism Window.app"
+          test -s "$CERT_VERIFY_DIR/cert-0"
           xcrun stapler validate "$VERIFY_DIR/Prism Window.app"
           spctl --assess --type execute --verbose=4 "$VERIFY_DIR/Prism Window.app"
 
@@ -286,4 +297,4 @@ jobs:
             security delete-keychain "$KEYCHAIN_PATH" || true
           fi
 
-          rm -f "${CERT_PATH:-}" "${CERT_BASE64_PATH:-}" "${APPLE_API_KEY_PATH:-}" "${DEVELOPER_ID_G1:-}" "${DEVELOPER_ID_G2:-}"
+          rm -f "${CERT_PATH:-}" "${CERT_BASE64_PATH:-}" "${APPLE_API_KEY_PATH:-}" "${APPLE_ROOT_CA:-}" "${DEVELOPER_ID_G1:-}" "${DEVELOPER_ID_G2:-}"
