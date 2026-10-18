@@ -7,11 +7,12 @@ import SwiftUI
 final class UpdateController: ObservableObject {
     @Published private(set) var canCheckForUpdates = false
     @Published private(set) var automaticallyChecksForUpdates = false
+    @Published private(set) var startupError: String?
     let isConfigured: Bool
     private let controller: SPUStandardUpdaterController
 
     init() {
-        // Local builds can omit the release signing key; do not start an invalid updater.
+        // Only start when a valid update verification key is embedded.
         let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String ?? ""
         isConfigured = Data(base64Encoded: key)?.count == 32
         controller = SPUStandardUpdaterController(
@@ -25,10 +26,16 @@ final class UpdateController: ObservableObject {
 
     func start() {
         guard isConfigured else { return }
-        controller.startUpdater()
+        do {
+            try controller.updater.start()
+            startupError = nil
+        } catch {
+            startupError = error.localizedDescription
+        }
     }
 
     func checkForUpdates() {
+        guard canCheckForUpdates else { return }
         NSApp.activate(ignoringOtherApps: true)
         controller.checkForUpdates(nil)
     }
@@ -56,6 +63,17 @@ struct SoftwareUpdateView: View {
             }
             .disabled(!updates.canCheckForUpdates)
             .help(updates.isConfigured ? "Check for a new version" : "Updates are unavailable in this development build")
+
+            if !updates.isConfigured {
+                Text("Updates are unavailable in this build. Install the official release to enable updates.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Link("Download Latest Release", destination: URL(string: "https://github.com/mohnya-org/PrismWindow/releases/latest")!)
+            } else if let error = updates.startupError {
+                Text("Could not start updates: \(error)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

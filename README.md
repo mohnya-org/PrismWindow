@@ -240,8 +240,10 @@ stable release are rejected. Releases run sequentially, and an active run is not
 GitHub Actions concurrency can replace a pending run with a newer one when several merges
 arrive in quick succession. In that case, the release includes the changes in the latest commit.
 
-Releases fail if the private key is missing. Development builds without a public key disable
-updates. To enable updates locally, pass `SPARKLE_PUBLIC_ED_KEY` to the SPM `build-app.sh`,
-or set the same key as `SUPublicEDKey` in FinderOne's built Info.plist before signing.
+Releases fail if the private key is missing. Prism Window's `Resources/Info.plist` includes
+the same public verification key as the official release, so local app bundles can check
+for updates. No private key is included. When rotating keys, pass `SPARKLE_PUBLIC_ED_KEY`
+to `build-app.sh` and update the public key in the repository. Builds with a missing or
+invalid public key disable updates and explain why in the UI.
 Users upgrading from a version without automatic updates must install the first
 update-enabled release manually.

@@ -118,7 +118,7 @@ final class AppState: ObservableObject {
     }
 
     func refreshRunningApps() {
-        runningApps = NSWorkspace.shared.runningApplications
+        let apps = NSWorkspace.shared.runningApplications
             .filter { application in
                 application.activationPolicy == .regular &&
                 application.processIdentifier != ProcessInfo.processInfo.processIdentifier &&
@@ -132,6 +132,9 @@ final class AppState: ObservableObject {
                 )
             }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        if apps != runningApps {
+            runningApps = apps
+        }
     }
 
     func selectProfile(id: String) {
@@ -346,7 +349,6 @@ final class AppState: ObservableObject {
             Task { @MainActor in
                 self?.refreshPermissions(prompt: false)
                 self?.refreshCurrentAppDescriptor()
-                self?.refreshRunningApps()
                 await self?.applyRuleForFrontmostAppIfNeeded()
             }
         }
