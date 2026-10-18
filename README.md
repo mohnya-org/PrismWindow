@@ -52,13 +52,13 @@ Resources/AppIcon.png
 
 The build script converts it into an `.icns` file and places it in the app bundle.
 
-The app version is read from:
+For local builds without a VERSION override, the development version is read from:
 
 ```bash
 Resources/Info.plist
 ```
 
-Current app version:
+Local development default (published versions are assigned by CI):
 
 ```bash
 1.3.0
@@ -74,11 +74,11 @@ GitHub Actions workflow:
 
 The workflow:
 
-- resolves the release version from `workflow_dispatch` input or `Resources/Info.plist`
-- creates a `v<version>` git tag if it does not already exist
-- builds `Prism Window.app`
-- signs and notarizes the app
-- uploads a zip archive and sha256 checksum to GitHub Releases
+- runs on main pushes and optional manual dispatch
+- increments the latest stable patch, or uses an explicit newer manual version
+- builds `Prism Window.app` with that version, signs it, and notarizes it
+- creates a tag for the built commit after artifacts are ready
+- uploads the ZIP, checksum, and appcast to a draft, then publishes the complete release
 
 Required GitHub secrets:
 
@@ -144,8 +144,25 @@ Xcode では DerivedData の `SourcePackages/artifacts/sparkle/Sparkle/bin` に�
 `appcast.xml` を同じ GitHub Release に添付します。フィードは
 `https://github.com/mohnya-org/PrismWindow/releases/latest/download/appcast.xml` です。
 公開リポジトリの通常リリースが対象です。ZIP とフィードは一緒に公開してください。
-次回リリースではバージョンを上げ、`CFBundleVersion` も必ず増加させます
-（Prism Window / FinderOne は Actions の run number、TartDesk はリリースバージョン）。
+main への push（PR マージを含む）で次の `vX.Y.Z` を自動採番します。
+通常は既存の正式版タグの最大バージョンからパッチ番号を 1 増やします。
+他のコミットで使われた未公開タグも予約済みとして飛ばし、タグを上書きしません。
+初回タグがない場合は `v0.0.1` です。ソースのバージョンを書き換えるコミットは不要です。
+Actions の手動実行では main を選び、任意で `version` に `1.5.0` のような
+新しい正式版を指定できます。空欄なら自動採番します。
+
+採番値を配布アプリのバージョンと ZIP 名に埋め込みます。
+`CFBundleVersion` は Prism Window / FinderOne では Actions の run number、
+TartDesk では採番したリリースバージョンです。
+ビルド・署名・公証・フィード生成後にトリガー元コミットへタグを作り、
+ZIP・チェックサム・appcast のアップロードが全部成功してから draft を公開します。
+これにより Release 公開 Webhook は必要な成果物がそろった状態で通知されます。
+
+失敗した場合は同じ Actions 実行を再実行できます。途中で作成済みの同一コミットの
+タグ・draft は再利用し、公開済みなら何も変更しません。新しい正式版より古い
+ソースを再公開する実行は拒否します。リリースは直列実行し、実行中のものは中止しません。
+GitHub Actions の concurrency により、短時間にマージが続くと待機中の実行は最新のものに
+置き換わる場合があります。その場合は最新コミットに含まれる変更をまとめて公開します。
 
 秘密鍵が未設定ならリリースは失敗して停止します。公開鍵を省略した開発ビルドでは更新は無効です。
 ローカルで有効にするには、SPM の build-app.sh に `SPARKLE_PUBLIC_ED_KEY` を渡すか、

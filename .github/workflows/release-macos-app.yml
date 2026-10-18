@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version without the v prefix. Omit to use CFBundleShortVersionString from Resources/Info.plist."
+        description: "Optional stable version without v (e.g. 1.5.0). Omit to increment the latest patch."
         required: false
 
 concurrency:
@@ -19,50 +19,35 @@ permissions:
 
 jobs:
   prepare-release:
+    if: github.ref == 'refs/heads/main'
     runs-on:
       - self-hosted
       - macOS
     outputs:
       version: ${{ steps.metadata.outputs.version }}
       tag: ${{ steps.metadata.outputs.tag }}
-      zip_name: ${{ steps.metadata.outputs.zip_name }}
-      zip_path: ${{ steps.metadata.outputs.zip_path }}
-      checksum_path: ${{ steps.metadata.outputs.checksum_path }}
-      should_release: ${{ steps.tag.outputs.should_release }}
-      skip_reason: ${{ steps.tag.outputs.skip_reason }}
-
+      should_release: ${{ steps.metadata.outputs.should_release }}
     steps:
-      - name: Check out repository
+      - name: Check out triggering commit
         uses: actions/checkout@v5
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
+
+      - name: Test release version selection and publication
+        run: |
+          python3 -B scripts/test-release-version.py
+          python3 -B scripts/test-publish-release.py
 
       - name: Resolve release metadata
         id: metadata
         env:
-          INPUT_VERSION: ${{ github.event.inputs.version }}
-        run: |
-          set -euo pipefail
-
-          if [[ -n "${INPUT_VERSION:-}" ]]; then
-            VERSION="$INPUT_VERSION"
-          else
-            VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-          fi
-
-          [[ -n "$VERSION" ]] || { echo "Could not resolve app version" >&2; exit 1; }
-
-          TAG="v$VERSION"
-
-          {
-            echo "version=$VERSION"
-            echo "tag=$TAG"
-            echo "zip_name=Prism Window-$VERSION-macOS.zip"
-            echo "zip_path=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip"
-            echo "checksum_path=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip.sha256"
-          } >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: python3 scripts/release-version.py
 
       - name: Validate update signing configuration
+        if: steps.metadata.outputs.should_release == 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
@@ -74,44 +59,9 @@ jobs:
           }
           python3 -c 'import base64, os; assert len(base64.b64decode(os.environ["SPARKLE_PUBLIC_ED_KEY"], validate=True)) == 32, "Invalid Sparkle public key"'
 
-      - name: Create release tag if missing
-        id: tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.metadata.outputs.tag }}
-        run: |
-          set -euo pipefail
-
-          git fetch --tags
-
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            EXISTING_SHA="$(git rev-list -n 1 "$TAG")"
-            CURRENT_SHA="$(git rev-parse HEAD)"
-
-            if [[ "$EXISTING_SHA" == "$CURRENT_SHA" ]]; then
-              echo "should_release=false" >> "$GITHUB_OUTPUT"
-              echo "skip_reason=tag already exists for this commit" >> "$GITHUB_OUTPUT"
-              echo "Tag $TAG already exists for this commit. Skipping release."
-              exit 0
-            fi
-
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=tag already exists on another commit" >> "$GITHUB_OUTPUT"
-            echo "Tag $TAG already exists on another commit ($EXISTING_SHA). Skipping release."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$TAG"
-          git push origin "$TAG"
-          echo "should_release=true" >> "$GITHUB_OUTPUT"
-          echo "skip_reason=" >> "$GITHUB_OUTPUT"
-
-      - name: Report skipped release
-        if: steps.tag.outputs.should_release != 'true'
-        run: |
-          echo "Release skipped: ${{ steps.tag.outputs.skip_reason }}"
+      - name: Report already published commit
+        if: steps.metadata.outputs.should_release != 'true'
+        run: echo "This commit already has a published stable release."
 
   release:
     needs: prepare-release
@@ -119,10 +69,22 @@ jobs:
     runs-on:
       - self-hosted
       - macOS
-
+    env:
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+      TAG: ${{ needs.prepare-release.outputs.tag }}
     steps:
-      - name: Check out repository
+      - name: Check out triggering commit
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set archive paths
+        run: |
+          {
+            echo "ZIP_PATH=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip"
+            echo "CHECKSUM_PATH=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip.sha256"
+          } >> "$GITHUB_ENV"
 
       - name: Import Developer ID certificate
         env:
@@ -163,13 +125,19 @@ jobs:
       - name: Build app bundle
         env:
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
-          VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
           set -euo pipefail
           mkdir -p dist
           VERSION="$VERSION" BUILD_NUMBER="${GITHUB_RUN_NUMBER}" CODESIGN_IDENTITY="-" ./scripts/build-app.sh
           rm -rf "dist/Prism Window.app"
           cp -R ".build/release/Prism Window.app" "dist/Prism Window.app"
+
+      - name: Verify packaged release version
+        run: |
+          set -euo pipefail
+          PLIST="dist/Prism Window.app/Contents/Info.plist"
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" == "$VERSION" ]]
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" == "$GITHUB_RUN_NUMBER" ]]
 
       - name: Verify app architecture
         run: |
@@ -195,16 +163,12 @@ jobs:
           echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Create signed archive for notarization
-        env:
-          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
         run: |
           set -euo pipefail
           mkdir -p dist
           ditto -c -k --keepParent "dist/Prism Window.app" "$ZIP_PATH"
 
       - name: Notarize app archive
-        env:
-          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
         run: |
           set -euo pipefail
           xcrun notarytool submit "$ZIP_PATH" \
@@ -220,9 +184,6 @@ jobs:
           xcrun stapler validate "dist/Prism Window.app"
 
       - name: Recreate release archive and checksum
-        env:
-          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
-          CHECKSUM_PATH: ${{ needs.prepare-release.outputs.checksum_path }}
         run: |
           set -euo pipefail
           rm -f "$ZIP_PATH" "$CHECKSUM_PATH"
@@ -233,25 +194,12 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           SPARKLE_BIN: .build/artifacts/sparkle/Sparkle/bin
-          TAG: ${{ needs.prepare-release.outputs.tag }}
-          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
         run: bash scripts/generate-appcast.sh
 
-      - name: Create or update GitHub Release
+      - name: Publish complete GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
-          ZIP_PATH: ${{ needs.prepare-release.outputs.zip_path }}
-          CHECKSUM_PATH: ${{ needs.prepare-release.outputs.checksum_path }}
-        run: |
-          set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml --clobber
-          else
-            gh release create "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml \
-              --title "$TAG" \
-              --generate-notes
-          fi
+        run: bash scripts/publish-release.sh
 
       - name: Cleanup signing keychain
         if: always()
