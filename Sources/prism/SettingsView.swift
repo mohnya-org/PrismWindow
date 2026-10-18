@@ -90,15 +90,25 @@ struct SettingsView: View {
     // MARK: - Overview
 
     private var overviewContent: some View {
-        VStack(spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Status")
+                    .font(.headline)
                 overviewMetrics
+
+                Divider()
+
+                Text("General")
+                    .font(.headline)
                 overviewStatusCard
+
+                Divider()
+
+                overviewDisplaysCard
+                    .frame(height: 240)
             }
-            overviewDisplaysCard
-                .frame(maxHeight: .infinity)
+            .padding(16)
         }
-        .padding(16)
     }
 
     private var overviewMetrics: some View {
@@ -179,6 +189,8 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
 
+            Divider()
+
             Toggle(isOn: $appState.defaultToFullscreenOnMove) {
                 Label("Move in fullscreen by default", systemImage: "arrow.up.left.and.arrow.down.right")
                     .font(.callout)
@@ -187,6 +199,7 @@ struct SettingsView: View {
             .controlSize(.small)
 
             if !appState.currentLayoutRules.isEmpty {
+                Divider()
                 Toggle(isOn: $appState.autoApplyRules) {
                     Label("Auto-apply rules on focus", systemImage: "bolt.fill")
                         .font(.callout)
@@ -302,12 +315,15 @@ struct SettingsView: View {
     }
 
     private var rulesSidebar: some View {
-        VStack(spacing: 0) {
+        let rules = appState.currentLayoutRules
+        let rulesByApp = Dictionary(rules.map { ($0.bundleIdentifier, $0) }, uniquingKeysWith: { first, _ in first })
+
+        return VStack(spacing: 0) {
             HStack {
                 Text("Apps")
                     .font(.headline)
                 Spacer()
-                Text("\(appState.currentLayoutRules.count) rules")
+                Text("\(rules.count) rules")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -316,7 +332,7 @@ struct SettingsView: View {
 
             List(selection: $selectedBundleIdentifier) {
                 ForEach(appState.runningApps) { app in
-                    let rule = appState.currentLayoutRules.first(where: { $0.bundleIdentifier == app.bundleIdentifier })
+                    let rule = rulesByApp[app.bundleIdentifier]
 
                     HStack(spacing: 8) {
                         ZStack(alignment: .bottomTrailing) {
@@ -444,7 +460,11 @@ struct SettingsView: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(.regularMaterial)
+            .fill(Color(nsColor: .controlBackgroundColor))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+            }
     }
 
     private var fullscreenBinding: Binding<Bool> {

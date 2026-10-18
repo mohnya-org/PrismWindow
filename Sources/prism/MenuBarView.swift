@@ -6,6 +6,7 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     @State private var hoveredDisplay: DisplayInfo?
+    @State private var focusedDisplayID: CGDirectDisplayID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -82,6 +83,13 @@ struct MenuBarView: View {
         .frame(width: 400)
         .onAppear {
             appState.refreshPermissions(prompt: false)
+            refreshFocusedDisplay()
+        }
+        .onChange(of: appState.currentAppDescriptor) { _, _ in refreshFocusedDisplay() }
+        .onChange(of: appState.displays) { _, _ in refreshFocusedDisplay() }
+        .onChange(of: appState.isAccessibilityTrusted) { _, _ in refreshFocusedDisplay() }
+        .onChange(of: appState.isHandlingMove) { _, moving in
+            if !moving { refreshFocusedDisplay() }
         }
     }
 
@@ -95,7 +103,7 @@ struct MenuBarView: View {
     }
 
     private var displayLayout: some View {
-        let displays = DisplayInfo.availableDisplays()
+        let displays = appState.displays
 
         return VStack(alignment: .leading, spacing: 6) {
             Label("Click a display to move the focused window", systemImage: "rectangle.2.swap")
@@ -111,6 +119,7 @@ struct MenuBarView: View {
                 MenuBarDisplayLayoutView(
                     displays: displays,
                     focusedAppDescriptor: appState.currentAppDescriptor,
+                    focusedDisplayID: focusedDisplayID,
                     isHandlingMove: appState.isHandlingMove,
                     isFocusedAppRuleCompliant: isFocusedAppRuleCompliant,
                     hoveredDisplay: $hoveredDisplay,
@@ -133,7 +142,7 @@ struct MenuBarView: View {
     }
 
     private func displayDetailBar(displays: [DisplayInfo]) -> some View {
-        let display = hoveredDisplay ?? displays.first(where: { isAppOnDisplay($0) })
+        let display = hoveredDisplay ?? displays.first(where: { $0.id == focusedDisplayID })
 
         return HStack(spacing: 8) {
             if let display {
@@ -154,24 +163,26 @@ struct MenuBarView: View {
         }
     }
 
-    private func isAppOnDisplay(_ display: DisplayInfo) -> Bool {
+    private func refreshFocusedDisplay() {
+        focusedDisplayID = nil
+        guard appState.isAccessibilityTrusted else { return }
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
-            return false
+            return
         }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
         guard let windowObj = appElement.optionalValue(for: kAXFocusedWindowAttribute as CFString),
               CFGetTypeID(windowObj) == AXUIElementGetTypeID() else {
-            return false
+            return
         }
         let window = unsafeDowncast(windowObj, to: AXUIElement.self)
         guard let position = cgPoint(from: window.optionalValue(for: kAXPositionAttribute as CFString)),
               let size = cgSize(from: window.optionalValue(for: kAXSizeAttribute as CFString)) else {
-            return false
+            return
         }
         let frame = CGRect(origin: position, size: size)
         let center = CGPoint(x: frame.midX, y: frame.midY)
-        return display.frame.contains(center)
+        focusedDisplayID = appState.displays.first { $0.frame.contains(center) }?.id
     }
 
     private var focusedAppRule: DisplayRule? {
@@ -234,6 +245,7 @@ private struct MenuBarDisplayLayout {
 private struct MenuBarDisplayLayoutView: View {
     let displays: [DisplayInfo]
     let focusedAppDescriptor: AppDescriptor?
+    let focusedDisplayID: CGDirectDisplayID?
     let isHandlingMove: Bool
     let isFocusedAppRuleCompliant: Bool
     @Binding var hoveredDisplay: DisplayInfo?
@@ -249,7 +261,7 @@ private struct MenuBarDisplayLayoutView: View {
             ZStack(alignment: .topLeading) {
                 ForEach(displays, id: \.id) { display in
                     let frame = layout.frame(for: display)
-                    let isFocusedHere = isAppOnDisplay(display)
+                    let isFocusedHere = focusedDisplayID == display.id
                     let isHovered = hoveredDisplayID == display.id
                     let isLocked = isFocusedHere && isFocusedAppRuleCompliant
 
@@ -293,8 +305,6 @@ private struct DisplayTileButton: View {
     let onSelect: () -> Void
     let onRemoveRule: (() -> Void)?
 
-    @State private var pulsePhase = false
-
     var body: some View {
         Button(action: onSelect) {
             ZStack {
@@ -305,19 +315,9 @@ private struct DisplayTileButton: View {
             .overlay { tileBorder }
             .overlay {
                 if isMovable && !isHovered {
-                    ZStack {
-                        // Ripple circle
-                        Circle()
-                            .stroke(Color.accentColor.opacity(pulsePhase ? 0 : 0.4), lineWidth: 1.5)
-                            .frame(width: pulsePhase ? 40 : 16, height: pulsePhase ? 40 : 16)
-                            .animation(.easeOut(duration: 1.5).repeatForever(autoreverses: false), value: pulsePhase)
-
-                        // Center dot
-                        Circle()
-                            .fill(Color.accentColor.opacity(0.6))
-                            .frame(width: 8, height: 8)
-
-                    }
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.6))
+                        .frame(width: 8, height: 8)
                 }
             }
         }
@@ -340,7 +340,6 @@ private struct DisplayTileButton: View {
                 .padding(6)
             }
         }
-        .onAppear { pulsePhase = true }
     }
 
     @ViewBuilder
@@ -424,27 +423,5 @@ private struct DisplayTileButton: View {
             : Color.secondary.opacity(isHovered ? 0.4 : 0.2)
         let width: CGFloat = isFocusedHere ? 1.5 : 1
         return RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(stroke, lineWidth: width)
-    }
-}
-
-private extension MenuBarDisplayLayoutView {
-    func isAppOnDisplay(_ display: DisplayInfo) -> Bool {
-        guard let app = NSWorkspace.shared.frontmostApplication,
-              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
-            return false
-        }
-        let appElement = AXUIElementCreateApplication(app.processIdentifier)
-        guard let windowObj = appElement.optionalValue(for: kAXFocusedWindowAttribute as CFString),
-              CFGetTypeID(windowObj) == AXUIElementGetTypeID() else {
-            return false
-        }
-        let window = unsafeDowncast(windowObj, to: AXUIElement.self)
-        guard let position = cgPoint(from: window.optionalValue(for: kAXPositionAttribute as CFString)),
-              let size = cgSize(from: window.optionalValue(for: kAXSizeAttribute as CFString)) else {
-            return false
-        }
-        let frame = CGRect(origin: position, size: size)
-        let center = CGPoint(x: frame.midX, y: frame.midY)
-        return display.frame.contains(center)
     }
 }
