@@ -26,7 +26,7 @@ Use the app bundle for local testing: it includes the Sparkle framework required
 
 ## Release Build
 
-Build a distributable `.app` bundle:
+Build a local release-configuration `.app` bundle (ad-hoc signed, not notarized):
 
 ```bash
 ./scripts/build-app.sh
@@ -89,6 +89,63 @@ Required GitHub secrets:
 - `APPLE_API_PRIVATE_KEY`
 - `APPLE_API_KEY_ID`
 - `APPLE_API_ISSUER_ID`
+- `APPLE_TEAM_ID`
+
+Organization Secrets must be made available to this repository. The workflow also requires
+`SPARKLE_PRIVATE_KEY` and `SPARKLE_PUBLIC_ED_KEY` for the existing updater. Before any build,
+`macos-distribution.py preflight` reports missing/invalid variable names only; it never prints values.
+
+### Local signing versus distribution signing
+
+`./scripts/build-app.sh` defaults to `SIGNING_MODE=adhoc`. It signs nested code from the inside
+out for local execution without accessing Developer ID credentials. This is **not** a Gatekeeper
+approved distribution build. `SIGNING_MODE=unsigned` creates the CI staging bundle; neither mode
+performs notarization. The old `CODESIGN_IDENTITY` build override is no longer used.
+
+Distribution uses `scripts/macos-distribution.py release <app> <zip>` in CI. It imports the
+certificate into a uniquely named temporary keychain, selects exactly one valid Developer ID
+Application identity whose certificate OU matches `APPLE_TEAM_ID`, and passes that keychain
+explicitly to every signing command. It never replaces the user's keychain search list or default
+keychain, including on the self-hosted runner. All temporary paths are unique to the invocation.
+
+Every physical Mach-O executable (including Sparkle helpers), XPC service, nested app and framework
+is signed before its enclosing bundle; the host app is signed last. Signing uses Hardened Runtime
+and a secure timestamp, without `--deep`. This Swift/AppKit app and the pinned Sparkle 2.10.0
+binaries require no entitlements: no JIT, unsigned executable memory, debugger, or disabled library
+validation exceptions are added. Verification rejects unexpected entitlements; review this policy
+when changing dependencies. Accessibility permission remains a user-granted TCC permission.
+
+The release flow then:
+
+1. Removes AppleDouble metadata and extended attributes **before** signing.
+2. Verifies all signatures, signing teams, Hardened Runtime and timestamps.
+3. Creates a ZIP with `ditto --norsrc --noextattr` and rejects any `._*`/`__MACOSX` entries.
+4. Submits with `notarytool` using the App Store Connect API key and requires JSON status `Accepted`.
+5. Staples the ticket, then recreates the final ZIP with the same metadata exclusions.
+6. Extracts the final ZIP into a fresh directory and requires `codesign --verify --deep --strict`,
+   matching teams for all nested code, `stapler validate`, and `spctl --assess --type execute`.
+7. Generates the checksum and Sparkle appcast from this final ZIP, then rechecks the checksum and
+   extracted app before allowing the existing publication step to run.
+
+After code signing, only ticket stapling is allowed; do not edit bundle contents, clean metadata,
+or re-sign the app afterward. The temporary certificate, API key and keychain are cleaned in a
+`finally` block on success/failure and on SIGINT/SIGTERM; an `always()` workflow step retries cleanup
+after cancellation. A cleanup failure blocks publication. A machine crash/SIGKILL cannot run process
+cleanup, so the workflow fallback must run when the runner recovers; do not share runner OS accounts
+with untrusted jobs (environment variables and process arguments are not an isolation boundary).
+
+Offline checks (no secrets or Apple service requests):
+
+```bash
+python3 -B scripts/test-macos-distribution.py
+python3 -B scripts/test-release-version.py
+python3 -B scripts/test-publish-release.py
+actionlint .github/workflows/release-macos-app.yml
+zsh -n scripts/build-app.sh
+```
+
+See [Apple notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+and [Sparkle nested-code signing](https://sparkle-project.org/documentation/sandboxing/).
 
 ## Permissions
 
