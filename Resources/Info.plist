@@ -27,9 +27,9 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUFeedURL</key>
-	<string>https://github.com/mohnya-org/PrismWindow/releases/latest/download/appcast.xml</string>
+	<string></string>
 	<key>SUPublicEDKey</key>
-	<string>xNwxQdk0QkJpRJo4rkIYUAEpUHVTHeE993CFBYDE+7s=</string>
+	<string></string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUAutomaticallyUpdate</key>
