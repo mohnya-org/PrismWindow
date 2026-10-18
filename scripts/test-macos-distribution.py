@@ -171,10 +171,33 @@ class DistributionTests(unittest.TestCase):
             m.run(['tool', 'secret-argument'], 'Test stage')
         self.assertEqual(str(error.exception), 'Test stage failed')
 
-    def test_no_global_keychain_settings_mutations(self):
+    def test_codesign_error_reports_only_fixed_markers(self):
+        output = b'Warning: unable to build chain to self-signed root for signer "secret-certificate (SECRETTEAM)"\n/private/secret-path: errSecInternalComponent\nsecret-password'
+        result = type('Result', (), dict(returncode=1, stdout=b'secret-output', stderr=output))()
+        with patch.object(m.subprocess, 'run', return_value=result), self.assertRaises(m.ReleaseError) as error:
+            m.run(['codesign', '--sign', 'secret-identity'], 'Code signing [helper]')
+        message = str(error.exception)
+        self.assertIn('exit 1', message)
+        self.assertIn('unable to build chain to self-signed root', message)
+        self.assertIn('errSecInternalComponent', message)
+        self.assertNotIn('secret', message.lower())
+        self.assertEqual(m.signing_error(b'arbitrary-secret-error'), 'unclassified codesign error (raw output suppressed)')
+
+    def test_default_keychain_is_never_changed(self):
         source = Path(m.__file__).read_text()
         self.assertNotIn("'default-keychain'", source)
-        self.assertNotIn("'list-keychains'", source)
+
+    def test_registration_preserves_all_existing_keychains(self):
+        with patch.object(m, 'run', side_effect=[b'    "/Users/fixture/login.keychain-db"\n    "/tmp/other job.keychain-db"\n', b'']) as run:
+            m.register_signing_keychain('/tmp/own.keychain-db')
+        self.assertEqual(run.call_args.args[0], [
+            'security', 'list-keychains', '-d', 'user', '-s',
+            '/Users/fixture/login.keychain-db', '/tmp/other job.keychain-db', '/tmp/own.keychain-db'])
+
+    def test_registration_does_not_duplicate_own_entry(self):
+        with patch.object(m, 'run', return_value=b'"/tmp/own.keychain-db"') as run:
+            m.register_signing_keychain('/tmp/own.keychain-db')
+        self.assertEqual(run.call_count, 1)
 
     def test_verification_rejects_wrong_team_missing_runtime_timestamp_and_entitlements(self):
         binary = self.macho('Contents/MacOS/PrismWindow')

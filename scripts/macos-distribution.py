@@ -9,6 +9,7 @@ from pathlib import Path
 import plistlib
 import re
 import secrets
+import shlex
 import shutil
 import signal
 import subprocess
@@ -32,6 +33,25 @@ class ReleaseError(Exception):
     pass
 
 
+def signing_error(stderr):
+    # Emit ONLY fixed known error labels, never raw diagnostics: codesign can
+    # include the signing certificate's name/team and absolute keychain paths.
+    markers = (
+        'errSecInternalComponent', 'errSecInteractionNotAllowed',
+        'User interaction is not allowed', 'unable to build chain to self-signed root',
+        'The specified item could not be found in the keychain',
+        'no identity found', 'The user name or passphrase you entered is not correct',
+        'resource fork, Finder information, or similar detritus not allowed',
+        'bundle format unrecognized, invalid, or unsuitable',
+        'code object is not signed at all', 'a sealed resource is missing or invalid',
+        'timestamp service is not available', 'A timestamp was expected but was not found',
+        'CSSMERR_TP_CERT_EXPIRED', 'CSSMERR_TP_NOT_TRUSTED',
+        'errSecAuthFailed', 'errSecNotAvailable', 'errSecCSInternalError',
+    )
+    output = stderr.decode(errors='replace')
+    return '; '.join(marker for marker in markers if marker.lower() in output.lower()) or 'unclassified codesign error (raw output suppressed)'
+
+
 def run(args, stage, **kwargs):
     # In particular, security/notarytool may echo credentials in diagnostics.
     # Do not print argv, stderr, stdout, or CalledProcessError.
@@ -41,6 +61,8 @@ def run(args, stage, **kwargs):
     except (OSError, subprocess.TimeoutExpired):
         raise ReleaseError(f'{stage} failed') from None
     if result.returncode:
+        if str(args[0]) == 'codesign':
+            raise ReleaseError(f'{stage} failed (exit {result.returncode}): {signing_error(result.stderr)}')
         raise ReleaseError(f'{stage} failed')
     return result.stdout
 
@@ -100,7 +122,9 @@ def sign_app(app, identity, keychain=None):
     # Swift/AppKit and the pinned Sparkle binaries need no entitlements.
     # Do not preserve development entitlements or add JIT/library-validation exceptions.
     for target in code_targets(app):
-        run(args + [target], 'Code signing')
+        component = str(target.relative_to(app)) if target != Path(app) else 'host app'
+        print(f'Signing component: {component}', flush=True)
+        run(args + [target], f'Code signing [{component}]')
     run(['codesign', '--verify', '--deep', '--strict', app], 'Signature verification')
 
 
@@ -123,6 +147,18 @@ def signing_identity(keychain, team):
     if len(matches) != 1:
         raise ReleaseError('Expected exactly one valid Developer ID Application identity matching APPLE_TEAM_ID')
     return matches[0]
+
+
+def register_signing_keychain(keychain):
+    # Some securityd/codesign versions still require search-list membership
+    # even with --keychain. Keep every existing entry, including other jobs'.
+    # delete-keychain removes only our entry during finally/always cleanup.
+    existing = shlex.split(run(['security', 'list-keychains', '-d', 'user'],
+                              'Keychain search list lookup').decode())
+    path = str(keychain)
+    if path not in existing:
+        run(['security', 'list-keychains', '-d', 'user', '-s', *existing, path],
+            'Temporary keychain registration')
 
 
 def verify_app(app, team, notarized=True):
@@ -221,11 +257,12 @@ def release(app, archive):
              '-T', '/usr/bin/codesign', '-T', '/usr/bin/security'], 'Certificate import')
         run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', password, keychain],
             'Signing key access configuration')
+        register_signing_keychain(keychain)
         identity = signing_identity(keychain, os.environ['APPLE_TEAM_ID'])
         cert.unlink()
-        # Never change the default keychain or replace the user's search list.
-        # codesign is given this job's unique keychain explicitly.
-        print('Developer ID certificate team verified')
+        # Never change the default keychain or discard existing search entries.
+        # codesign is also given this job's unique keychain explicitly.
+        print('Developer ID certificate team verified', flush=True)
         for path in sorted(app.rglob('*'), key=lambda p: -len(p.parts)):
             if path.name.startswith('._') or path.name == '__MACOSX':
                 if path.is_dir() and not path.is_symlink():
