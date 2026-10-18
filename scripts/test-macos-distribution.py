@@ -171,6 +171,18 @@ class DistributionTests(unittest.TestCase):
             m.run(['tool', 'secret-argument'], 'Test stage')
         self.assertEqual(str(error.exception), 'Test stage failed')
 
+    def test_codesign_error_reports_only_fixed_markers(self):
+        output = b'Warning: unable to build chain to self-signed root for signer "secret-certificate (SECRETTEAM)"\n/private/secret-path: errSecInternalComponent\nsecret-password'
+        result = type('Result', (), dict(returncode=1, stdout=b'secret-output', stderr=output))()
+        with patch.object(m.subprocess, 'run', return_value=result), self.assertRaises(m.ReleaseError) as error:
+            m.run(['codesign', '--sign', 'secret-identity'], 'Code signing [helper]')
+        message = str(error.exception)
+        self.assertIn('exit 1', message)
+        self.assertIn('unable to build chain to self-signed root', message)
+        self.assertIn('errSecInternalComponent', message)
+        self.assertNotIn('secret', message.lower())
+        self.assertEqual(m.signing_error(b'arbitrary-secret-error'), 'unclassified codesign error (raw output suppressed)')
+
     def test_no_global_keychain_settings_mutations(self):
         source = Path(m.__file__).read_text()
         self.assertNotIn("'default-keychain'", source)
