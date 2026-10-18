@@ -27,7 +27,9 @@ if [[ ! -f "$PLIST_TEMPLATE" ]]; then
   exit 1
 fi
 
+cd "$ROOT_DIR"
 swift build -c release
+BIN_DIR="$(swift build -c release --show-bin-path)"
 
 rm -rf "$APP_DIR" "$ICONSET_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$ICONSET_DIR"
@@ -51,8 +53,15 @@ create_icon 1024 icon_512x512@2x.png
 
 iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
 
-cp "$RELEASE_DIR/PrismWindow" "$MACOS_DIR/PrismWindow"
+cp "$BIN_DIR/PrismWindow" "$MACOS_DIR/PrismWindow"
 cp "$PLIST_TEMPLATE" "$PLIST_PATH"
+mkdir -p "$CONTENTS_DIR/Frameworks"
+SPARKLE_FRAMEWORK="$BUILD_DIR/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+[[ -d "$SPARKLE_FRAMEWORK" ]] || { echo "Sparkle framework not found: $SPARKLE_FRAMEWORK" >&2; exit 1; }
+ditto "$SPARKLE_FRAMEWORK" "$CONTENTS_DIR/Frameworks/Sparkle.framework"
+if [[ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_ED_KEY" "$PLIST_PATH"
+fi
 chmod +x "$MACOS_DIR/PrismWindow"
 
 if [[ -n "$VERSION" ]]; then

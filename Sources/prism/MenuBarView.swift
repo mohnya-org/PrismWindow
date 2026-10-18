@@ -61,6 +61,9 @@ struct MenuBarView: View {
                 displayLayout
             }
 
+            Divider()
+            SoftwareUpdateView()
+
             // Footer
             HStack {
                 Button("Settings…") {
