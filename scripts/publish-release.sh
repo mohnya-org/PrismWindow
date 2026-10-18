@@ -6,6 +6,10 @@ set -euo pipefail
 : "${GITHUB_REPOSITORY:?}"
 # All three assets must exist before creating a tag or a draft.
 for asset in "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml; do
+  # GitHub normalizes spaces and special characters in uploaded asset names.
+  [[ "$(basename "$asset")" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+    echo "Unsafe release asset filename: $(basename "$asset")" >&2; exit 1;
+  }
   [[ -s "$asset" ]] || { echo "Missing release asset: $asset" >&2; exit 1; }
 done
 sha=$(git rev-parse HEAD)

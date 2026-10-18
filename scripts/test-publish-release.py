@@ -88,6 +88,23 @@ class PublishTests(unittest.TestCase):
         self.assertNotEqual(self.run_script().returncode,0)
         self.assertFalse(any(c[0]=='gh' for c in self.calls()))
 
+    def test_unsafe_asset_name_is_rejected_before_tagging(self):
+        path=self.root/'dist/Prism Window-1.2.4-macOS.zip'
+        path.write_text('fixture')
+        self.env['ZIP_PATH']=str(path)
+        result=self.run_script()
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('Unsafe release asset filename',result.stderr)
+        self.assertFalse((self.root/'calls').exists())
+
+    def test_appcast_rejects_name_github_would_normalize(self):
+        path=self.root/'dist/Prism Window-1.2.4-macOS.zip'
+        path.write_text('fixture')
+        env=dict(self.env, ZIP_PATH=str(path), SPARKLE_PRIVATE_KEY='unused-fixture', SPARKLE_BIN='/does-not-exist')
+        result=subprocess.run(['bash',str(Path(__file__).with_name('generate-appcast.sh').resolve())],cwd=self.root,env=env,capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('Unsafe release asset filename',result.stderr)
+
     def test_missing_asset_creates_no_tag(self):
         (self.root/'dist/appcast.xml').unlink()
         self.assertNotEqual(self.run_script().returncode,0)

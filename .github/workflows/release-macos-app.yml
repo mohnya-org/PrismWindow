@@ -82,8 +82,8 @@ jobs:
       - name: Set archive paths
         run: |
           {
-            echo "ZIP_PATH=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip"
-            echo "CHECKSUM_PATH=$GITHUB_WORKSPACE/dist/Prism Window-$VERSION-macOS.zip.sha256"
+            echo "ZIP_PATH=$GITHUB_WORKSPACE/dist/PrismWindow-$VERSION-macOS.zip"
+            echo "CHECKSUM_PATH=$GITHUB_WORKSPACE/dist/PrismWindow-$VERSION-macOS.zip.sha256"
           } >> "$GITHUB_ENV"
 
       - name: Import Developer ID certificate
