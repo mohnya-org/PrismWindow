@@ -15,7 +15,12 @@ PLIST_TEMPLATE="$ROOT_DIR/Resources/Info.plist"
 PLIST_PATH="$CONTENTS_DIR/Info.plist"
 VERSION="${VERSION:-}"
 BUILD_NUMBER="${BUILD_NUMBER:-}"
-CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+SIGNING_MODE="${SIGNING_MODE:-adhoc}"
+
+[[ "$SIGNING_MODE" == adhoc || "$SIGNING_MODE" == unsigned ]] || {
+  echo "SIGNING_MODE must be adhoc or unsigned; use macos-distribution.py for Developer ID distribution." >&2
+  exit 1
+}
 
 if [[ ! -f "$SOURCE_ICON" ]]; then
   echo "Missing source icon: $SOURCE_ICON" >&2
@@ -58,7 +63,7 @@ cp "$PLIST_TEMPLATE" "$PLIST_PATH"
 mkdir -p "$CONTENTS_DIR/Frameworks"
 SPARKLE_FRAMEWORK="$BUILD_DIR/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 [[ -d "$SPARKLE_FRAMEWORK" ]] || { echo "Sparkle framework not found: $SPARKLE_FRAMEWORK" >&2; exit 1; }
-ditto "$SPARKLE_FRAMEWORK" "$CONTENTS_DIR/Frameworks/Sparkle.framework"
+ditto --norsrc --noextattr "$SPARKLE_FRAMEWORK" "$CONTENTS_DIR/Frameworks/Sparkle.framework"
 if [[ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_ED_KEY" "$PLIST_PATH"
 fi
@@ -72,6 +77,8 @@ if [[ -n "$BUILD_NUMBER" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST_PATH"
 fi
 
-codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP_DIR" >/dev/null
+if [[ "$SIGNING_MODE" == adhoc ]]; then
+  python3 -B "$ROOT_DIR/scripts/macos-distribution.py" sign-local "$APP_DIR"
+fi
 
 echo "Built app bundle: $APP_DIR"
