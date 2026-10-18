@@ -192,48 +192,56 @@ You can keep multiple profiles for the same display setup and switch which one a
 - Stage Manager, Mission Control, and Space transitions can affect perceived behavior
 - Public APIs do not provide a true Space-to-Space fullscreen move
 
-## 自動アップデート（Sparkle 2）
+## Automatic Updates (Sparkle 2)
 
-アプリは定期的に更新を確認し、Sparkle 標準の画面でダウンロード・インストール・再起動します。
-「Automatically check for updates」で定期チェックを切り替え、「Check for Updates…」で手動確認できます。
-更新操作は Prism Window / FinderOne ではメニューバーのパネル、TartDesk ではアプリメニューにあります。
+The app periodically checks for updates and uses Sparkle's standard interface to download,
+install, and restart. Use “Automatically check for updates” to toggle periodic checks and
+“Check for Updates…” to check manually. Update controls are in the menu bar panel for
+Prism Window / FinderOne and in the application menu for TartDesk.
 
-配布前に GitHub Actions の repository secrets を設定してください。
+Configure these GitHub Actions repository secrets before distribution, or grant the repository
+access to the corresponding Organization Secrets:
 
-- `SPARKLE_PRIVATE_KEY`: Sparkle の `generate_keys -x` で書き出した秘密鍵。
-- `SPARKLE_PUBLIC_ED_KEY`: 同じ鍵の `generate_keys -p` が表示する公開鍵。
+- `SPARKLE_PRIVATE_KEY`: the private key exported with Sparkle's `generate_keys -x`.
+- `SPARKLE_PUBLIC_ED_KEY`: the public key shown by `generate_keys -p` for the same key pair.
 
-Sparkle のツールは SPM ビルド後の `.build/artifacts/sparkle/Sparkle/bin`、
-Xcode では DerivedData の `SourcePackages/artifacts/sparkle/Sparkle/bin` にあります。
-`generate_keys --account <app-name>` で鍵を一度だけ生成し、同じ `--account` を
-`-p` と `-x` にも指定します。秘密鍵はリポジトリに保存せず、安全にバックアップしてください。
-更新を継続できるよう、リリースごとに鍵を生成し直さないでください。
+After an SPM build, Sparkle's tools are in `.build/artifacts/sparkle/Sparkle/bin`.
+For Xcode builds, they are under `SourcePackages/artifacts/sparkle/Sparkle/bin` in DerivedData.
+Generate the key pair once with `generate_keys --account <app-name>` and use the same
+`--account` with both `-p` and `-x`. Keep a secure backup of the private key and never commit
+it to the repository. Reuse the key pair across releases to preserve update continuity.
 
-ワークフローは公開鍵をアプリに埋め込み、公証・staple 後の最終 ZIP に署名し、
-`appcast.xml` を同じ GitHub Release に添付します。フィードは
-`https://github.com/mohnya-org/PrismWindow/releases/latest/download/appcast.xml` です。
-公開リポジトリの通常リリースが対象です。ZIP とフィードは一緒に公開してください。
-main への push（PR マージを含む）で次の `vX.Y.Z` を自動採番します。
-通常は既存の正式版タグの最大バージョンからパッチ番号を 1 増やします。
-他のコミットで使われた未公開タグも予約済みとして飛ばし、タグを上書きしません。
-初回タグがない場合は `v0.0.1` です。ソースのバージョンを書き換えるコミットは不要です。
-Actions の手動実行では main を選び、任意で `version` に `1.5.0` のような
-新しい正式版を指定できます。空欄なら自動採番します。
+The workflow embeds the public key in the app, signs the final notarized and stapled ZIP
+for Sparkle, and attaches `appcast.xml` to the same GitHub Release. The feed URL is:
 
-採番値を配布アプリのバージョンと ZIP 名に埋め込みます。
-`CFBundleVersion` は Prism Window / FinderOne では Actions の run number、
-TartDesk では採番したリリースバージョンです。
-ビルド・署名・公証・フィード生成後にトリガー元コミットへタグを作り、
-ZIP・チェックサム・appcast のアップロードが全部成功してから draft を公開します。
-これにより Release 公開 Webhook は必要な成果物がそろった状態で通知されます。
+```text
+https://github.com/mohnya-org/PrismWindow/releases/latest/download/appcast.xml
+```
 
-失敗した場合は同じ Actions 実行を再実行できます。途中で作成済みの同一コミットの
-タグ・draft は再利用し、公開済みなら何も変更しません。新しい正式版より古い
-ソースを再公開する実行は拒否します。リリースは直列実行し、実行中のものは中止しません。
-GitHub Actions の concurrency により、短時間にマージが続くと待機中の実行は最新のものに
-置き換わる場合があります。その場合は最新コミットに含まれる変更をまとめて公開します。
+This setup targets standard releases in a public repository. Publish the ZIP and feed together.
+Pushes to main, including PR merges, automatically assign the next `vX.Y.Z` version.
+Normally, the patch number is incremented from the highest existing stable-version tag.
+Unpublished tags used by other commits are treated as reserved and skipped; existing tags
+are never overwritten. If there are no existing tags, the first version is `v0.0.1`.
+No commit updating the source version is required. For a manual release, select main in
+Actions and optionally supply a newer stable `version`, such as `1.5.0`. Leave it empty
+for automatic version selection. Use `validate_only=true` to validate without publishing.
 
-秘密鍵が未設定ならリリースは失敗して停止します。公開鍵を省略した開発ビルドでは更新は無効です。
-ローカルで有効にするには、SPM の build-app.sh に `SPARKLE_PUBLIC_ED_KEY` を渡すか、
-FinderOne のビルド済み Info.plist の `SUPublicEDKey` に同じ公開鍵を設定してから署名します。
-既存の自動更新未対応版からは、最初の対応版だけ手動でインストールする必要があります。
+The selected version is embedded in the distributed app and ZIP filename.
+`CFBundleVersion` uses the Actions run number for Prism Window / FinderOne and the selected
+release version for TartDesk. After the build, signing, notarization, and feed generation
+succeed, the workflow tags the triggering commit. It publishes the draft only after the ZIP,
+checksum, and appcast have all been uploaded, so release webhooks receive a complete set
+of artifacts.
+
+If a run fails, it can be rerun. An existing tag or draft for the same commit is reused;
+a published release is left unchanged. Runs that would publish source older than the latest
+stable release are rejected. Releases run sequentially, and an active run is not canceled.
+GitHub Actions concurrency can replace a pending run with a newer one when several merges
+arrive in quick succession. In that case, the release includes the changes in the latest commit.
+
+Releases fail if the private key is missing. Development builds without a public key disable
+updates. To enable updates locally, pass `SPARKLE_PUBLIC_ED_KEY` to the SPM `build-app.sh`,
+or set the same key as `SUPublicEDKey` in FinderOne's built Info.plist before signing.
+Users upgrading from a version without automatic updates must install the first
+update-enabled release manually.
