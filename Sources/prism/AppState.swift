@@ -310,6 +310,7 @@ final class AppState: ObservableObject {
     func removeRule(_ rule: DisplayRule) {
         rules.removeAll { $0.id == rule.id }
         persist()
+        lastMessage = "Removed the rule for \(rule.appName) in \(rule.profileName)."
     }
 
     func updateRuleMode(_ rule: DisplayRule, to mode: DisplayWindowMode) {
@@ -413,6 +414,12 @@ final class AppState: ObservableObject {
               let targetDisplay = displays.first(where: { $0.persistentID == rule.targetDisplayPersistentID }) else {
             return
         }
+
+        // Moving can activate the app or change Spaces, both of which trigger
+        // this method again. Keep automatic and manual moves serialized while
+        // the asynchronous fullscreen/Space transitions are in progress.
+        isHandlingMove = true
+        defer { isHandlingMove = false }
 
         do {
             if try windowMover.focusedWindowMatches(

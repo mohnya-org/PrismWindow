@@ -61,6 +61,10 @@ struct MenuBarView: View {
                 displayLayout
             }
 
+            if let rule = focusedAppRule {
+                focusedAppRuleControls(rule)
+            }
+
             Divider()
             SoftwareUpdateView()
 
@@ -171,15 +175,40 @@ struct MenuBarView: View {
         return display.frame.contains(center)
     }
 
-    private var isFocusedAppRuleCompliant: Bool {
-        guard appState.autoApplyRules,
-              let bundleID = appState.currentAppDescriptor?.bundleIdentifier,
-              appState.currentLayoutRules.contains(where: { $0.bundleIdentifier == bundleID }) else {
-            return false
+    private var focusedAppRule: DisplayRule? {
+        guard let bundleID = appState.currentAppDescriptor?.bundleIdentifier else { return nil }
+        return appState.currentLayoutRules.first { $0.bundleIdentifier == bundleID }
+    }
+
+    private func focusedAppRuleControls(_ rule: DisplayRule) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(rule.appName)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text("\(appState.targetDisplayName(for: rule)) · \(rule.windowMode.label)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                appState.removeRule(rule)
+            } label: {
+                Label("Remove Rule", systemImage: "lock.open")
+            }
+            .controlSize(.small)
+            .disabled(appState.isHandlingMove)
+            .help("Remove the rule for \(rule.appName) in the current display setup and profile.")
         }
+    }
+
+    private var isFocusedAppRuleCompliant: Bool {
         // If auto-apply is on and a rule exists, the app is either already
         // on the correct display or will be moved there momentarily.
-        return true
+        appState.autoApplyRules && focusedAppRule != nil
     }
 
     private func moveFocusedWindow(to displayID: CGDirectDisplayID) {
