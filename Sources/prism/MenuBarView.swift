@@ -61,10 +61,6 @@ struct MenuBarView: View {
                 displayLayout
             }
 
-            if let rule = focusedAppRule {
-                focusedAppRuleControls(rule)
-            }
-
             Divider()
             SoftwareUpdateView()
 
@@ -118,7 +114,10 @@ struct MenuBarView: View {
                     isHandlingMove: appState.isHandlingMove,
                     isFocusedAppRuleCompliant: isFocusedAppRuleCompliant,
                     hoveredDisplay: $hoveredDisplay,
-                    onSelect: moveFocusedWindow(to:)
+                    onSelect: moveFocusedWindow(to:),
+                    onRemoveRule: focusedAppRule.map { rule in
+                        { appState.removeRule(rule) }
+                    }
                 )
                 .frame(height: 200)
                 .background {
@@ -180,31 +179,6 @@ struct MenuBarView: View {
         return appState.currentLayoutRules.first { $0.bundleIdentifier == bundleID }
     }
 
-    private func focusedAppRuleControls(_ rule: DisplayRule) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(rule.appName)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Text("\(appState.targetDisplayName(for: rule)) · \(rule.windowMode.label)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                appState.removeRule(rule)
-            } label: {
-                Label("Remove Rule", systemImage: "lock.open")
-            }
-            .controlSize(.small)
-            .disabled(appState.isHandlingMove)
-            .help("Remove the rule for \(rule.appName) in the current display setup and profile.")
-        }
-    }
-
     private var isFocusedAppRuleCompliant: Bool {
         // If auto-apply is on and a rule exists, the app is either already
         // on the correct display or will be moved there momentarily.
@@ -264,6 +238,7 @@ private struct MenuBarDisplayLayoutView: View {
     let isFocusedAppRuleCompliant: Bool
     @Binding var hoveredDisplay: DisplayInfo?
     let onSelect: (CGDirectDisplayID) -> Void
+    let onRemoveRule: (() -> Void)?
 
     @State private var hoveredDisplayID: CGDirectDisplayID?
 
@@ -287,7 +262,8 @@ private struct MenuBarDisplayLayoutView: View {
                         isMovable: !isFocusedHere && !isHandlingMove,
                         tileFrame: frame,
                         isDisabled: isHandlingMove,
-                        onSelect: { onSelect(display.id) }
+                        onSelect: { onSelect(display.id) },
+                        onRemoveRule: isFocusedHere ? onRemoveRule : nil
                     )
                     .onHover { hovering in
                         withAnimation(.easeInOut(duration: 0.15)) {
@@ -315,6 +291,7 @@ private struct DisplayTileButton: View {
     let tileFrame: CGRect
     let isDisabled: Bool
     let onSelect: () -> Void
+    let onRemoveRule: (() -> Void)?
 
     @State private var pulsePhase = false
 
@@ -346,6 +323,23 @@ private struct DisplayTileButton: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+        .overlay(alignment: .topTrailing) {
+            if let onRemoveRule, let app = focusedApp {
+                Button(action: onRemoveRule) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .background(.regularMaterial, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isDisabled)
+                .help("Remove the rule for \(app.displayName) in the current display setup and profile.")
+                .accessibilityLabel("Remove rule for \(app.displayName)")
+                .padding(6)
+            }
+        }
         .onAppear { pulsePhase = true }
     }
 
