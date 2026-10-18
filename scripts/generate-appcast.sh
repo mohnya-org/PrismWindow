@@ -7,6 +7,10 @@ set -euo pipefail
 : "${ZIP_PATH:?Set the final notarized ZIP path}"
 : "${SPARKLE_BIN:?Set the directory containing generate_appcast}"
 [[ -f "$ZIP_PATH" ]] || { echo "Release archive missing" >&2; exit 1; }
+# Keep the enclosure URL identical to the name GitHub will actually store.
+[[ "$(basename "$ZIP_PATH")" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+  echo "Unsafe release asset filename: $(basename "$ZIP_PATH")" >&2; exit 1;
+}
 staging=$(mktemp -d)
 trap 'rm -rf "$staging"' EXIT
 cp "$ZIP_PATH" "$staging/"

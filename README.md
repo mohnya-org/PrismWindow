@@ -64,6 +64,8 @@ Local development default (published versions are assigned by CI):
 1.3.0
 ```
 
+Published archives use `PrismWindow-<version>-macOS.zip` (no spaces). The app bundle remains `Prism Window.app`. GitHub normalizes asset names containing spaces, so both appcast generation and publication reject unsafe filenames.
+
 ## Release CI
 
 GitHub Actions workflow:
