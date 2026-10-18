@@ -105,8 +105,11 @@ performs notarization. The old `CODESIGN_IDENTITY` build override is no longer u
 Distribution uses `scripts/macos-distribution.py release <app> <zip>` in CI. It imports the
 certificate into a uniquely named temporary keychain, selects exactly one valid Developer ID
 Application identity whose certificate OU matches `APPLE_TEAM_ID`, and passes that keychain
-explicitly to every signing command. It never replaces the user's keychain search list or default
-keychain, including on the self-hosted runner. All temporary paths are unique to the invocation.
+explicitly to every signing command. It also appends that keychain to the user's search list,
+preserving every existing entry; `codesign` can fail to resolve the identity without this on
+self-hosted macOS runners. Cleanup deletes only this job's keychain and its search-list entry,
+preserving other jobs' entries rather than restoring a stale list snapshot. The default keychain
+is never changed. All temporary paths are unique to the invocation.
 
 Every physical Mach-O executable (including Sparkle helpers), XPC service, nested app and framework
 is signed before its enclosing bundle; the host app is signed last. Signing uses Hardened Runtime
@@ -133,6 +136,13 @@ or re-sign the app afterward. The temporary certificate, API key and keychain ar
 after cancellation. A cleanup failure blocks publication. A machine crash/SIGKILL cannot run process
 cleanup, so the workflow fallback must run when the runner recovers; do not share runner OS accounts
 with untrusted jobs (environment variables and process arguments are not an isolation boundary).
+
+For a pre-merge validation, manually dispatch `release-macos-app.yml` on the trusted fix branch
+with `validate_only=true`. It uses the configured Secrets and runs signing, notarization and final
+artifact verification, but never creates tags, drafts or published releases. No changes to main
+are required. Normal main pushes retain the existing automatic publication behavior.
+Signing failures identify the component and exit code and classify known codesign errors;
+raw tool output, certificate identities, keychain paths and secret values remain suppressed.
 
 Offline checks (no secrets or Apple service requests):
 
