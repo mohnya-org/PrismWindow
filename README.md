@@ -9,17 +9,20 @@ Prism Window is a macOS menu bar app that moves the focused window to the correc
 - Auto-apply when an app becomes frontmost
 - Multiple named setup profiles for the same physical display arrangement
 - Manual move UI in the menu bar
+- Remove the focused app's rule directly from the menu bar for the current display setup and profile
 - Visual display layout picker
 - Settings UI for editing rules, profiles, and display setups
 
 ## Development
 
-Run the app from source:
+Build and launch the app from source:
 
 ```bash
-swift build
-swift run PrismWindow
+./scripts/build-app.sh
+open ".build/release/Prism Window.app"
 ```
+
+Use the app bundle for local testing: it includes the Sparkle framework required at runtime. `swift run PrismWindow` does not bundle that framework and can fail to launch. Quit any running copy of Prism Window before opening the newly built app.
 
 ## Release Build
 
