@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   prepare-release:
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.validate_only)
+    if: github.repository == 'mohnya-org/PrismWindow' && (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.validate_only))
     runs-on:
       - self-hosted
       - macOS
@@ -106,6 +106,7 @@ jobs:
       - name: Build app bundle
         env:
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_FEED_URL: https://github.com/mohnya-org/PrismWindow/releases/latest/download/appcast.xml
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -119,6 +120,9 @@ jobs:
           PLIST="dist/Prism Window.app/Contents/Info.plist"
           [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" == "$VERSION" ]]
           [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" == "$GITHUB_RUN_NUMBER" ]]
+
+      - name: Test update configuration
+        run: bash scripts/test-update-configuration.sh
 
       - name: Verify app architecture
         run: |

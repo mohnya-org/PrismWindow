@@ -67,6 +67,9 @@ ditto --norsrc --noextattr "$SPARKLE_FRAMEWORK" "$CONTENTS_DIR/Frameworks/Sparkl
 if [[ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_ED_KEY" "$PLIST_PATH"
 fi
+if [[ -n "${SPARKLE_FEED_URL:-}" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :SUFeedURL $SPARKLE_FEED_URL" "$PLIST_PATH"
+fi
 chmod +x "$MACOS_DIR/PrismWindow"
 
 if [[ -n "$VERSION" ]]; then
