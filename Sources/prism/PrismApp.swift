@@ -10,6 +10,7 @@ struct PrismApp: App {
         MenuBarExtra("Prism Window", systemImage: "display.2") {
             MenuBarView()
                 .environmentObject(appState)
+                .environmentObject(appDelegate.updates)
                 .frame(width: 400)
         }
         .menuBarExtraStyle(.window)
@@ -17,6 +18,7 @@ struct PrismApp: App {
         Window("Prism Window Settings", id: "settings") {
             SettingsView()
                 .environmentObject(appState)
+                .environmentObject(appDelegate.updates)
                 .frame(minWidth: 780, minHeight: 520)
                 .toolbar(.hidden)
         }
@@ -25,8 +27,11 @@ struct PrismApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    let updates = UpdateController()
     func applicationDidFinishLaunching(_ notification: Notification) {
+        updates.start()
         NSApp.setActivationPolicy(.accessory)
     }
 }
