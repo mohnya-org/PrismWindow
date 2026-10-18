@@ -9,6 +9,7 @@ from pathlib import Path
 import plistlib
 import re
 import secrets
+import shlex
 import shutil
 import signal
 import subprocess
@@ -148,6 +149,18 @@ def signing_identity(keychain, team):
     return matches[0]
 
 
+def register_signing_keychain(keychain):
+    # Some securityd/codesign versions still require search-list membership
+    # even with --keychain. Keep every existing entry, including other jobs'.
+    # delete-keychain removes only our entry during finally/always cleanup.
+    existing = shlex.split(run(['security', 'list-keychains', '-d', 'user'],
+                              'Keychain search list lookup').decode())
+    path = str(keychain)
+    if path not in existing:
+        run(['security', 'list-keychains', '-d', 'user', '-s', *existing, path],
+            'Temporary keychain registration')
+
+
 def verify_app(app, team, notarized=True):
     run(['codesign', '--verify', '--deep', '--strict', app], 'Strict signature verification')
     # Verify every physical executable as well as the outer bundle.
@@ -244,10 +257,11 @@ def release(app, archive):
              '-T', '/usr/bin/codesign', '-T', '/usr/bin/security'], 'Certificate import')
         run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', password, keychain],
             'Signing key access configuration')
+        register_signing_keychain(keychain)
         identity = signing_identity(keychain, os.environ['APPLE_TEAM_ID'])
         cert.unlink()
-        # Never change the default keychain or replace the user's search list.
-        # codesign is given this job's unique keychain explicitly.
+        # Never change the default keychain or discard existing search entries.
+        # codesign is also given this job's unique keychain explicitly.
         print('Developer ID certificate team verified', flush=True)
         for path in sorted(app.rglob('*'), key=lambda p: -len(p.parts)):
             if path.name.startswith('._') or path.name == '__MACOSX':
