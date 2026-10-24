@@ -4,8 +4,10 @@ set -euo pipefail
 : "${ZIP_PATH:?}"
 : "${CHECKSUM_PATH:?}"
 : "${GITHUB_REPOSITORY:?}"
-# All three assets must exist before creating a tag or a draft.
-for asset in "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml; do
+: "${DMG_PATH:?}"
+assets=("$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml "$DMG_PATH" "$DMG_PATH.sha256")
+# All update and first-install assets must exist before publishing.
+for asset in "${assets[@]}"; do
   # GitHub normalizes spaces and special characters in uploaded asset names.
   [[ "$(basename "$asset")" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
     echo "Unsafe release asset filename: $(basename "$asset")" >&2; exit 1;
@@ -40,6 +42,6 @@ fi
 if [[ "$state" == missing ]]; then
   gh release create "$TAG" --verify-tag --target "$sha" --draft --title "$TAG" --generate-notes
 fi
-gh release upload "$TAG" "$ZIP_PATH" "$CHECKSUM_PATH" dist/appcast.xml --clobber
+gh release upload "$TAG" "${assets[@]}" --clobber
 # Publication happens only after every upload succeeds, so release webhooks see complete assets.
 gh release edit "$TAG" --draft=false --latest

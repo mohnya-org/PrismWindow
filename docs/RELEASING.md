@@ -195,3 +195,44 @@ builds to the official app's update feed.
 
 Users upgrading from a version without automatic updates must install the first
 update-enabled release manually.
+
+## First installation: signed DMG
+
+Releases include a signed, notarized `<app>-<version>-macOS.dmg` and its SHA-256 checksum.
+Open the DMG in Finder, drag the app onto its Applications shortcut, eject the image,
+and launch the installed app from Applications. Sparkle continues to use the ZIP and appcast.
+Do not launch the app directly from the mounted image.
+
+The DMG uses the existing `APPLE_CERT_BASE64` / `APPLE_CERT_PASSWORD` Developer ID
+Application identity and `APPLE_TEAM_ID`. Notarization reuses `APPLE_API_KEY_ID`,
+`APPLE_API_ISSUER_ID`, and `APPLE_API_PRIVATE_KEY`; no separate DMG certificate or API key
+is needed. Apple Distribution certificates are not a substitute for Developer ID Application.
+The workflow uses a private temporary keychain without changing the default keychain.
+It signs and notarizes the image, staples its ticket, then mounts it read-only to verify
+Gatekeeper acceptance, the embedded app signature/version, and the Applications shortcut.
+All ZIP, DMG, checksum, and appcast files must exist before publication.
+
+To validate a trusted branch without publishing, manually dispatch `release-macos-app.yml`
+with `validate_only=true`. This uses signing secrets but creates no tag or release.
+The verified DMG is retained as a workflow artifact for seven days. Offline DMG tests:
+`python3 -B scripts/test-macos-dmg.py`.
+
+Prefer organization secrets scoped to selected repositories or protected environments.
+Inventory all consumers before narrowing existing all-repository access. Never copy another
+organization's private keys into this project. Secret names alone do not establish certificate
+validity; successful signing and notarization are required verification.
+
+## Future PKG distribution
+
+PKG creation is not enabled. It requires a separate **Developer ID Installer** certificate,
+in addition to the Developer ID Application certificate that signs the bundled app.
+An account holder should create it in Apple Developer, export it with its private key as a
+password-protected `.p12`, and configure `APPLE_INSTALLER_CERT_BASE64` and
+`APPLE_INSTALLER_CERT_PASSWORD` for the intended repositories. Do not replace the existing
+Application certificate secrets. The current notarization API credentials can be reused;
+a new App Store Connect app record or API key is not required just to add PKG packaging.
+
+A future PKG workflow must sign with that Installer identity, notarize and staple the package,
+and verify it with `pkgutil --check-signature`, `stapler validate`, and Gatekeeper's install
+assessment before publication. Test installation and subsequent Sparkle updates on a clean Mac.
+See [Apple's Developer ID certificate guide](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/).
