@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from keychain_lock import keychain_lock
 
 APPLE_SECRETS = (
     'APPLE_CERT_BASE64', 'APPLE_CERT_PASSWORD', 'APPLE_TEAM_ID',
@@ -153,12 +154,13 @@ def register_signing_keychain(keychain):
     # Some securityd/codesign versions still require search-list membership
     # even with --keychain. Keep every existing entry, including other jobs'.
     # delete-keychain removes only our entry during finally/always cleanup.
-    existing = shlex.split(run(['security', 'list-keychains', '-d', 'user'],
-                              'Keychain search list lookup').decode())
-    path = str(keychain)
-    if path not in existing:
-        run(['security', 'list-keychains', '-d', 'user', '-s', *existing, path],
-            'Temporary keychain registration')
+    with keychain_lock():
+        existing = shlex.split(run(['security', 'list-keychains', '-d', 'user'],
+                                  'Keychain search list lookup').decode())
+        path = str(keychain)
+        if path not in existing:
+            run(['security', 'list-keychains', '-d', 'user', '-s', *existing, path],
+                'Temporary keychain registration')
 
 
 def verify_app(app, team, notarized=True):
@@ -218,7 +220,8 @@ def cleanup(directory):
     keychain = directory / 'signing.keychain-db'
     failed = False
     if keychain.exists():
-        result = subprocess.run(['security', 'delete-keychain', str(keychain)], capture_output=True)
+        with keychain_lock():
+            result = subprocess.run(['security', 'delete-keychain', str(keychain)], capture_output=True)
         failed = result.returncode != 0
     # Remove certificate/API key even if the keychain service fails. Retain the
     # keychain for the workflow's always() retry instead of silently forgetting it.
@@ -250,7 +253,8 @@ def release(app, archive):
         cert.chmod(0o600)
         api_key.chmod(0o600)
         password = secrets.token_urlsafe(32)
-        run(['security', 'create-keychain', '-p', password, keychain], 'Temporary keychain creation')
+        with keychain_lock():
+            run(['security', 'create-keychain', '-p', password, keychain], 'Temporary keychain creation')
         run(['security', 'set-keychain-settings', '-lut', '21600', keychain], 'Keychain configuration')
         run(['security', 'unlock-keychain', '-p', password, keychain], 'Keychain unlock')
         run(['security', 'import', cert, '-k', keychain, '-P', os.environ['APPLE_CERT_PASSWORD'],
