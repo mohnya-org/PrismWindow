@@ -15,10 +15,30 @@ final class AppState: ObservableObject {
     @Published var isHandlingMove = false
     @Published var currentAppDescriptor: AppDescriptor?
     @Published var runningApps: [AppDescriptor] = []
-    @Published var displays: [DisplayInfo] = []
-    @Published var rules: [DisplayRule] = []
-    @Published var profiles: [DisplaySetupProfile] = []
-    @Published var selectedProfileIDsByLayout: [String: String] = [:]
+    @Published var displays: [DisplayInfo] = [] {
+        didSet { invalidateLayoutCache() }
+    }
+    @Published var rules: [DisplayRule] = [] {
+        didSet { invalidateLayoutCache() }
+    }
+    @Published var profiles: [DisplaySetupProfile] = [] {
+        didSet { invalidateLayoutCache() }
+    }
+    @Published var selectedProfileIDsByLayout: [String: String] = [:] {
+        didSet { invalidateLayoutCache() }
+    }
+
+    // These values depend only on layout/rule/profile inputs, not focus changes,
+    // status messages, or which Settings tab is visible.
+    private var cachedCurrentProfiles: [DisplaySetupProfile]?
+    private var cachedCurrentLayoutRules: [DisplayRule]?
+    private var cachedSavedLayouts: [SavedDisplayLayout]?
+
+    private func invalidateLayoutCache() {
+        cachedCurrentProfiles = nil
+        cachedCurrentLayoutRules = nil
+        cachedSavedLayouts = nil
+    }
 
     private let permissionManager = PermissionManager()
     private let windowMover = WindowMover()
@@ -50,30 +70,35 @@ final class AppState: ObservableObject {
     }
 
     var currentProfiles: [DisplaySetupProfile] {
+        if let cachedCurrentProfiles { return cachedCurrentProfiles }
+        let signature = currentLayoutSignature
         let layoutProfiles = profiles
-            .filter { $0.layoutSignature == currentLayoutSignature }
+            .filter { $0.layoutSignature == signature }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
-        if layoutProfiles.isEmpty {
-            return [defaultProfileForCurrentLayout()]
-        }
-        return layoutProfiles
+        let result = layoutProfiles.isEmpty ? [defaultProfileForCurrentLayout()] : layoutProfiles
+        cachedCurrentProfiles = result
+        return result
     }
 
     var selectedProfileID: String {
-        let fallback = currentProfiles.first?.id ?? defaultProfileForCurrentLayout().id
-        return selectedProfileIDsByLayout[currentLayoutSignature] ?? fallback
+        selectedProfileIDsByLayout[currentLayoutSignature]
+            ?? currentProfiles.first?.id ?? defaultProfileForCurrentLayout().id
     }
 
     var selectedProfile: DisplaySetupProfile {
-        currentProfiles.first(where: { $0.id == selectedProfileID }) ?? defaultProfileForCurrentLayout()
+        let profileID = selectedProfileID
+        return currentProfiles.first(where: { $0.id == profileID }) ?? defaultProfileForCurrentLayout()
     }
 
     var currentLayoutRules: [DisplayRule] {
-        rules
+        if let cachedCurrentLayoutRules { return cachedCurrentLayoutRules }
+        let signature = currentLayoutSignature
+        let profileID = selectedProfileID
+        let result = rules
             .filter {
-                $0.layoutSignature == currentLayoutSignature &&
-                $0.profileID == selectedProfileID
+                $0.layoutSignature == signature &&
+                $0.profileID == profileID
             }
             .sorted { lhs, rhs in
                 if lhs.appName == rhs.appName {
@@ -81,6 +106,8 @@ final class AppState: ObservableObject {
                 }
                 return lhs.appName < rhs.appName
             }
+        cachedCurrentLayoutRules = result
+        return result
     }
 
     var defaultMoveMode: DisplayWindowMode {
@@ -88,12 +115,15 @@ final class AppState: ObservableObject {
     }
 
     var savedLayouts: [SavedDisplayLayout] {
+        if let cachedSavedLayouts { return cachedSavedLayouts }
+        let signature = currentLayoutSignature
         let groupedProfiles = Dictionary(grouping: profiles, by: \.layoutSignature)
-        let knownLayoutSignatures = Set(rules.map(\.layoutSignature)).union(groupedProfiles.keys)
+        let groupedRules = Dictionary(grouping: rules, by: \.layoutSignature)
+        let knownLayoutSignatures = Set(groupedRules.keys).union(groupedProfiles.keys)
 
-        return knownLayoutSignatures.map { signature in
+        let result = knownLayoutSignatures.map { signature in
             let layoutProfiles = (groupedProfiles[signature] ?? []).sorted { $0.name < $1.name }
-            let layoutRules = rules.filter { $0.layoutSignature == signature }
+            let layoutRules = groupedRules[signature] ?? []
             return SavedDisplayLayout(
                 signature: signature,
                 name: layoutProfiles.first?.layoutName ?? layoutRules.first?.layoutName ?? "Saved Layout",
@@ -102,10 +132,14 @@ final class AppState: ObservableObject {
             )
         }
         .sorted { lhs, rhs in
-            if lhs.signature == currentLayoutSignature { return true }
-            if rhs.signature == currentLayoutSignature { return false }
+            if lhs.signature != rhs.signature {
+                if lhs.signature == signature { return true }
+                if rhs.signature == signature { return false }
+            }
             return lhs.name < rhs.name
         }
+        cachedSavedLayouts = result
+        return result
     }
 
     func refreshPermissions(prompt: Bool) {

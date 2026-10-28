@@ -25,11 +25,12 @@ struct SettingsView: View {
     @State private var selectedDisplayPersistentID = ""
     @State private var selectedMode: DisplayWindowMode = .windowed
     @State private var selectedTab: SettingsTab = .overview
+    @State private var visitedTabs: Set<SettingsTab> = [.overview]
     @State private var profileNameDraft = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Tab", selection: $selectedTab) {
+            Picker("Tab", selection: tabSelection) {
                 ForEach(SettingsTab.allCases, id: \.rawValue) { tab in
                     Text(tab.title).tag(tab)
                 }
@@ -41,13 +42,15 @@ struct SettingsView: View {
 
             Divider()
 
-            switch selectedTab {
-            case .overview:
-                overviewContent
-            case .rules:
-                rulesEditor
-            case .layouts:
-                savedLayoutsList
+            // Create each page on first use, then retain its List/scroll/disclosure
+            // state. Only the selected page participates in input and accessibility.
+            GeometryReader { geometry in
+                ZStack {
+                    retainedTab(.overview) { overviewContent }
+                    retainedTab(.rules) { rulesEditor }
+                    retainedTab(.layouts) { savedLayoutsList }
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
         }
         .onAppear(perform: focusSettingsWindow)
@@ -63,6 +66,30 @@ struct SettingsView: View {
             if let newValue, appState.runningApps.contains(where: { $0.bundleIdentifier == newValue }) {
                 selectedBundleIdentifier = newValue
             }
+        }
+    }
+
+    private var tabSelection: Binding<SettingsTab> {
+        Binding(
+            get: { selectedTab },
+            set: { tab in
+                visitedTabs.insert(tab)
+                selectedTab = tab
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func retainedTab<Content: View>(
+        _ tab: SettingsTab, @ViewBuilder content: () -> Content
+    ) -> some View {
+        if visitedTabs.contains(tab) {
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(selectedTab == tab ? 1 : 0)
+                .disabled(selectedTab != tab)
+                .allowsHitTesting(selectedTab == tab)
+                .accessibilityHidden(selectedTab != tab)
         }
     }
 
@@ -483,7 +510,7 @@ struct SettingsView: View {
 
     private var savedLayoutsList: some View {
         ScrollView {
-            VStack(spacing: 10) {
+            LazyVStack(spacing: 10) {
                 if appState.savedLayouts.isEmpty {
                     Text("No saved display setups yet.")
                         .foregroundStyle(.secondary)
