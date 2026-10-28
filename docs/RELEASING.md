@@ -225,6 +225,15 @@ with `validate_only=true`. This uses signing secrets but creates no tag or relea
 The verified DMG is retained as a workflow artifact for seven days. Offline DMG tests:
 `python3 -B scripts/test-macos-dmg.py`.
 
+To test real DMG packaging without Developer ID credentials, install
+`scripts/dmg-requirements.txt` in a virtual environment, build a local ad hoc signed
+app with `./scripts/build-app.sh`, and run that environment's Python with
+`-B scripts/test-dmg-signature.py ".build/release/Prism Window.app"`.
+This creates and mounts a temporary DMG, checks the embedded app's strict signature
+and Finder layout, then detaches and removes it. It does not test notarization or
+Gatekeeper acceptance. Do not enable dmgbuild's `hide_extensions` for the app:
+it adds FinderInfo after signing and invalidates strict signature verification.
+
 Prefer organization secrets scoped to selected repositories or protected environments.
 Inventory all consumers before narrowing existing all-repository access. Never copy another
 organization's private keys into this project. Secret names alone do not establish certificate

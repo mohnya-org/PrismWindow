@@ -44,6 +44,15 @@ class DmgTests(unittest.TestCase):
             with self.assertRaisesRegex(dmg.DistributionError, '^Signing failed$'):
                 dmg.run(['security','fixture'],'Signing')
 
+    def test_codesign_diagnostics_only_expose_known_labels(self):
+        marker = 'resource fork, Finder information, or similar detritus not allowed'
+        for stderr, expected in ((f'private-path: {marker}', marker),
+                                 ('private-secret', 'unclassified codesign error (raw output suppressed)')):
+            with self.subTest(stderr=stderr), patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, b'private', stderr.encode())):
+                with self.assertRaises(dmg.DistributionError) as raised:
+                    dmg.run(['codesign', '--verify', 'private-path'], 'App verification')
+                self.assertEqual(str(raised.exception), 'App verification failed: ' + expected)
+
     def test_cleanup_refuses_unrelated_directory(self):
         with self.assertRaises(dmg.DistributionError):
             dmg.cleanup('/tmp/unrelated')
