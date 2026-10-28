@@ -90,24 +90,65 @@ struct SettingsView: View {
     // MARK: - Overview
 
     private var overviewContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Status")
-                    .font(.headline)
-                overviewMetrics
+        GeometryReader { geometry in
+            // Wide windows give the display map its own column. At the
+            // minimum window size, keep the controls in one compact top row
+            // and let the map use the remaining height instead of scrolling.
+            let usesSidebar = geometry.size.width >= 1_000
+                && geometry.size.width > geometry.size.height * 1.45
 
-                Divider()
+            Group {
+                if usesSidebar {
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            overviewStatusSection
+                            overviewGeneralSection
+                            Spacer(minLength: 0)
+                        }
+                        .frame(width: min(380, geometry.size.width * 0.35))
 
-                Text("General")
-                    .font(.headline)
-                overviewStatusCard
+                        Divider()
 
-                Divider()
+                        overviewDisplaysCard
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else {
+                    VStack(spacing: 12) {
+                        HStack(alignment: .top, spacing: 16) {
+                            overviewStatusSection
+                                .frame(maxWidth: .infinity)
 
-                overviewDisplaysCard
-                    .frame(height: 240)
+                            overviewGeneralSection
+                                .frame(maxWidth: .infinity)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+
+                        Divider()
+
+                        overviewDisplaysCard
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
             }
             .padding(16)
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+    }
+
+    private var overviewStatusSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Status")
+                .font(.headline)
+            overviewMetrics
+        }
+    }
+
+    private var overviewGeneralSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("General")
+                .font(.headline)
+            overviewStatusCard
         }
     }
 
@@ -239,6 +280,7 @@ struct SettingsView: View {
             if appState.displays.isEmpty {
                 Text("No displays detected.")
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 OverviewDisplayLayoutView(displays: appState.displays)
                     .frame(maxHeight: .infinity)
