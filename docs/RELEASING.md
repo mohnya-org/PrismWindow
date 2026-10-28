@@ -212,6 +212,14 @@ It signs and notarizes the image, staples its ticket, then mounts it read-only t
 Gatekeeper acceptance, the embedded app signature/version, and the Applications shortcut.
 All ZIP, DMG, checksum, and appcast files must exist before publication.
 
+DMG tooling uses uv to download managed Python 3.13 and install the hash-pinned
+requirements into a job-specific directory under `RUNNER_TEMP`, before building
+or signing the app. The environment, Python installation, and package cache are
+removed by an `always()` cleanup step. This does not require sudo or changes to
+shared runner directory permissions. We avoid `actions/setup-python` here because
+its macOS Python packages require `/Users/runner/hostedtoolcache`, which is not
+writable by our self-hosted runner account.
+
 To validate a trusted branch without publishing, manually dispatch `release-macos-app.yml`
 with `validate_only=true`. This uses signing secrets but creates no tag or release.
 The verified DMG is retained as a workflow artifact for seven days. Offline DMG tests:
