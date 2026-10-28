@@ -32,6 +32,17 @@ def run(args, stage, **kwargs):
     except (OSError, subprocess.TimeoutExpired):
         raise DistributionError(f'{stage} failed') from None
     if result.returncode:
+        if str(args[0]) == 'codesign':
+            # Only fixed labels may be logged; never expose raw tool output.
+            markers = (
+                'resource fork, Finder information, or similar detritus not allowed',
+                'a sealed resource is missing or invalid',
+                'code object is not signed at all',
+                'code failed to satisfy specified code requirement(s)',
+            )
+            output = result.stderr.decode(errors='replace').lower()
+            reason = '; '.join(m for m in markers if m.lower() in output)
+            raise DistributionError(f'{stage} failed: {reason or "unclassified codesign error (raw output suppressed)"}')
         raise DistributionError(f'{stage} failed')
     return result
 
@@ -125,7 +136,9 @@ def build_image(app, dmg):
         'window_rect': ((window['x'], window['y']), (window['width'], window['height'])),
         'icon_locations': {app.name: tuple(layout['app']), 'Applications': tuple(layout['applications'])},
         'icon_size': layout['iconSize'], 'text_size': layout['iconTextSize'],
-        'hide_extensions': [app.name], 'default_view': 'icon-view',
+        # hide_extensions invokes SetFile, adding FinderInfo to the signed app.
+        # Keep the bundle untouched; presentation belongs in the volume DS_Store.
+        'hide_extensions': [], 'default_view': 'icon-view',
         'show_toolbar': False, 'show_sidebar': False, 'show_status_bar': False,
         'show_pathbar': False, 'show_tab_view': False,
         'include_icon_view_settings': True, 'include_list_view_settings': False,
